@@ -1,4 +1,4 @@
-module github.com/yourname/seta/auth-service
+module github.com/dungpd/seta/auth-service
 
 go 1.25.0
 
