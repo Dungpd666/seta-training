@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 
+	"github.com/dungpd/seta/auth-service/internal/model"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -23,6 +24,10 @@ func main() {
 		log.Fatal().Err(err).Msg("failed to connect to database")
 	}
 	log.Info().Msg("connected to database")
+	if err := db.AutoMigrate(&model.User{}); err != nil {
+		log.Fatal().Err(err).Msg("failed to migrate database")
+	}
+	log.Info().Msg("database migrated")
 
 	r := gin.New()
 	r.Use(gin.Recovery())
