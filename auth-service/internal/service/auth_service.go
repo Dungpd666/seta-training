@@ -143,7 +143,7 @@ func (s *AuthService) RevokeSession(accessTokenStr, refreshTokenStr string) erro
 	}
 
 	if ttl := time.Until(accessClaims.ExpiresAt.Time); ttl > 0 {
-		return s.redis.Set(context.Background(), "jwt:blacklist:"+accessClaims.ID, "1", ttl).Err()
+		return s.redis.Set(context.Background(), blacklistKey(accessClaims.ID), "1", ttl).Err()
 	}
 	return nil
 }
@@ -168,7 +168,7 @@ func (s *AuthService) keyFunc() jwt.Keyfunc {
 }
 
 func (s *AuthService) IsBlacklisted(jti string) (bool, error) {
-	err := s.redis.Get(context.Background(), "jwt:blacklist:"+jti).Err()
+	err := s.redis.Get(context.Background(), blacklistKey(jti)).Err()
 	if err == redis.Nil {
 		return false, nil
 	}
@@ -176,4 +176,8 @@ func (s *AuthService) IsBlacklisted(jti string) (bool, error) {
 		return false, err
 	}
 	return true, nil
+}
+
+func blacklistKey(jti string) string {
+	return "jwt:blacklist:" + jti
 }
