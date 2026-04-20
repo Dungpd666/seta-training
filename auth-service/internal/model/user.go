@@ -1,15 +1,14 @@
 package model
 
-import (
-	"time"
-)
+import "time"
 
 type User struct {
-	ID           string `gorm:"type:uuid;default:gen_random_uuid()"`
-	Username     string `gorm:"not null"`
-	Email        string `gorm:"uniqueIndex;not null"`
-	PasswordHash string `gorm:"not null"`
-	Role         string `gorm:"not null; check:role IN('manager', 'member')"`
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	UserID       string    `gorm:"column:user_id;primaryKey"`
+	Username     string    `gorm:"column:username"`
+	Email        string    `gorm:"column:email"`
+	PasswordHash string    `gorm:"column:password_hash"`
+	Role         string    `gorm:"column:role"`
+	CreatedAt    time.Time `gorm:"column:created_at"`
 }
+
+func (User) TableName() string { return "users" }

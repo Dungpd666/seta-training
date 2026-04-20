@@ -1,4 +1,3 @@
-// Package repository handles all database queries
 package repository
 
 import (
@@ -26,11 +25,13 @@ func (r *UserRepository) FindByEmail(email string) (*model.User, error) {
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
+	if err != nil {
+		return nil, err
+	}
 	return &user, nil
 }
 
 func (r *UserRepository) FindAll() ([]model.User, error) {
 	var users []model.User
-	err := r.db.Find(&users).Error
-	return users, err
+	return users, r.db.Find(&users).Error
 }

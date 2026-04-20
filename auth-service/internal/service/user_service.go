@@ -4,23 +4,22 @@ import (
 	"errors"
 
 	"github.com/dungpd/seta/auth-service/internal/model"
-	"github.com/dungpd/seta/auth-service/internal/repository"
 	"golang.org/x/crypto/bcrypt"
 )
 
 type UserService struct {
-	repo *repository.UserRepository
+	repo UserRepo
 }
 
-func NewUserService(repo *repository.UserRepository) *UserService {
+func NewUserService(repo UserRepo) *UserService {
 	return &UserService{repo: repo}
 }
 
-func (s *UserService) Register(username, email, password, role string) (*model.User, error) {
-	if role != "manager" && role != "member" {
-		return nil, errors.New("invalid role")
-	}
+func (s *UserService) ListAll() ([]model.User, error) {
+	return s.repo.FindAll()
+}
 
+func (s *UserService) Register(username, email, password, role string) (*model.User, error) {
 	existing, err := s.repo.FindByEmail(email)
 	if err != nil {
 		return nil, err
@@ -40,11 +39,9 @@ func (s *UserService) Register(username, email, password, role string) (*model.U
 		PasswordHash: string(hash),
 		Role:         role,
 	}
-
 	if err := s.repo.Create(user); err != nil {
 		return nil, err
 	}
-
 	return user, nil
 }
 
@@ -56,10 +53,8 @@ func (s *UserService) Login(email, password string) (*model.User, error) {
 	if user == nil {
 		return nil, errors.New("invalid credentials")
 	}
-
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
 		return nil, errors.New("invalid credentials")
 	}
-
 	return user, nil
 }
