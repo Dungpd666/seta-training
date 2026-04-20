@@ -166,3 +166,14 @@ func (s *AuthService) keyFunc() jwt.Keyfunc {
 		return s.publicKey, nil
 	}
 }
+
+func (s *AuthService) IsBlacklisted(jti string) (bool, error) {
+	err := s.redis.Get(context.Background(), "jwt:blacklist:"+jti).Err()
+	if err == redis.Nil {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}

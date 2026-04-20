@@ -90,6 +90,10 @@ func run() error {
 	r.POST("/refresh", h.Refresh)
 	r.POST("/logout", h.Logout)
 
+	protected := r.Group("/")
+	protected.Use(handler.JWTAuth(authSvc))
+	protected.GET("/users", h.ListUsers)
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8081"

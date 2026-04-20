@@ -124,3 +124,23 @@ func (h *UserHandler) JWKS(c *gin.Context) {
 		"kid": "auth-service-key-1", "n": n, "e": e,
 	}}})
 }
+
+func (h *UserHandler) ListUsers(c *gin.Context) {
+	users, err := h.userSvc.ListAll()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list users"})
+		return
+	}
+
+	result := make([]gin.H, len(users))
+	for i, u := range users {
+		result[i] = gin.H{
+			"user_id":    u.UserID,
+			"username":   u.Username,
+			"email":      u.Email,
+			"role":       u.Role,
+			"created_at": u.CreatedAt,
+		}
+	}
+	c.JSON(http.StatusOK, result)
+}
