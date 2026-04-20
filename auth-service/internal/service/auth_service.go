@@ -50,7 +50,6 @@ func (s *AuthService) PublicKey() *rsa.PublicKey {
 	return s.publicKey
 }
 
-// GenerateTokenPair issues an access + refresh token pair and persists the refresh token.
 func (s *AuthService) GenerateTokenPair(userID, role string) (accessToken, refreshToken string, err error) {
 	now := time.Now()
 
@@ -95,7 +94,6 @@ func (s *AuthService) GenerateTokenPair(userID, role string) (accessToken, refre
 	return
 }
 
-// RotateRefreshToken validates the refresh token, revokes it, and issues a new pair.
 func (s *AuthService) RotateRefreshToken(tokenStr string) (accessToken, refreshToken string, err error) {
 	claims, err := s.ParseToken(tokenStr,
 		jwt.WithIssuer(Issuer),
@@ -122,7 +120,6 @@ func (s *AuthService) RotateRefreshToken(tokenStr string) (accessToken, refreshT
 	return s.GenerateTokenPair(claims.Subject, claims.Role)
 }
 
-// RevokeSession blacklists the access token JTI and revokes the refresh token.
 func (s *AuthService) RevokeSession(accessTokenStr, refreshTokenStr string) error {
 	accessClaims, err := s.ParseToken(accessTokenStr,
 		jwt.WithIssuer(Issuer),
@@ -148,7 +145,6 @@ func (s *AuthService) RevokeSession(accessTokenStr, refreshTokenStr string) erro
 	return nil
 }
 
-// ParseToken verifies the signature and returns parsed claims.
 func (s *AuthService) ParseToken(tokenStr string, opts ...jwt.ParserOption) (*Claims, error) {
 	claims := &Claims{}
 	_, err := jwt.ParseWithClaims(tokenStr, claims, s.keyFunc(), opts...)
