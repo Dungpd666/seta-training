@@ -1,0 +1,25 @@
+# Binaries
+main
+auth-service/main
+core-service/main
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# RSA keys
+*.pem
+*.pub
+
+# Go build cache
+vendor/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
