@@ -1,19 +1,33 @@
 package handler
 
 import (
+	"crypto/rsa"
 	"net/http"
 	"strings"
 
-	"github.com/dungpd/seta/auth-service/internal/service"
+	"github.com/dungpd/seta/auth-service/internal/domain"
 	"github.com/gin-gonic/gin"
 )
 
-type UserHandler struct {
-	userSvc *service.UserService
-	authSvc *service.AuthService
+type userService interface {
+	Register(username, email, password, role string) (*domain.User, error)
+	Login(email, password string) (*domain.User, error)
+	ListAll() ([]domain.User, error)
 }
 
-func NewUserHandler(userSvc *service.UserService, authSvc *service.AuthService) *UserHandler {
+type authService interface {
+	GenerateTokenPair(userID, role string) (string, string, error)
+	RotateRefreshToken(tokenStr string) (string, string, error)
+	RevokeSession(accessTokenStr, refreshTokenStr string) error
+	PublicKey() *rsa.PublicKey
+}
+
+type UserHandler struct {
+	userSvc userService
+	authSvc authService
+}
+
+func NewUserHandler(userSvc userService, authSvc authService) *UserHandler {
 	return &UserHandler{userSvc: userSvc, authSvc: authSvc}
 }
 
