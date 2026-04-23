@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"os"
 
@@ -11,15 +12,13 @@ import (
 	"github.com/dungpd/seta/auth-service/internal/repository"
 	"github.com/dungpd/seta/auth-service/internal/service"
 	"github.com/gin-gonic/gin"
-	"github.com/golang-migrate/migrate/v4"
-	_ "github.com/golang-migrate/migrate/v4/database/postgres"
-	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/jackc/pgx/v5/pgxpool"
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/joho/godotenv"
+	"github.com/pressly/goose/v3"
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
 )
 
 func main() {
@@ -40,9 +39,13 @@ func run() error {
 		return fmt.Errorf("migrations: %w", err)
 	}
 
-	db, err := gorm.Open(postgres.Open(cfg.DBURL), &gorm.Config{})
+	dbPool, err := pgxpool.New(context.Background(), cfg.DBURL)
 	if err != nil {
 		return fmt.Errorf("database: %w", err)
+	}
+	defer dbPool.Close()
+	if err := dbPool.Ping(context.Background()); err != nil {
+		return fmt.Errorf("database ping: %w", err)
 	}
 	log.Info().Msg("connected to database")
 
@@ -52,8 +55,8 @@ func run() error {
 	}
 	log.Info().Msg("connected to redis")
 
-	userRepo := repository.NewUserRepository(db)
-	refreshRepo := repository.NewRefreshTokenRepository(db)
+	userRepo := repository.NewUserRepository(dbPool)
+	refreshRepo := repository.NewRefreshTokenRepository(dbPool)
 	userSvc := service.NewUserService(userRepo)
 	authSvc := service.NewAuthService(refreshRepo, cfg.PrivateKey, cfg.PublicKey, rdb)
 	h := handler.NewUserHandler(userSvc, authSvc)
@@ -69,8 +72,7 @@ func run() error {
 	})
 
 	r.GET("/health", func(c *gin.Context) {
-		sqlDB, err := db.DB()
-		if err != nil || sqlDB.Ping() != nil {
+		if err := dbPool.Ping(context.Background()); err != nil {
 			c.JSON(503, gin.H{"status": "unhealthy"})
 			return
 		}
@@ -78,12 +80,14 @@ func run() error {
 	})
 
 	r.GET("/.well-known/jwks.json", h.JWKS)
-	r.POST("/register", h.Register)
-	r.POST("/login", h.Login)
-	r.POST("/refresh", h.Refresh)
-	r.POST("/logout", h.Logout)
 
-	protected := r.Group("/")
+	v1 := r.Group("/v1")
+	v1.POST("/register", h.Register)
+	v1.POST("/login", h.Login)
+	v1.POST("/refresh", h.Refresh)
+	v1.POST("/logout", h.Logout)
+
+	protected := v1.Group("/")
 	protected.Use(middleware.JWTAuth(authSvc))
 	protected.GET("/users", h.ListUsers)
 
@@ -104,11 +108,16 @@ func connectRedis(url string) (*redis.Client, error) {
 }
 
 func runMigrations(dbURL, path string) error {
-	m, err := migrate.New("file://"+path, dbURL)
+	db, err := sql.Open("pgx", dbURL)
 	if err != nil {
 		return err
 	}
-	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+	defer db.Close()
+
+	if err := goose.SetDialect("postgres"); err != nil {
+		return err
+	}
+	if err := goose.Up(db, path); err != nil {
 		return err
 	}
 	log.Info().Msg("migrations applied")
