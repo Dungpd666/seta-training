@@ -1,4 +1,4 @@
-package handler
+package middleware
 
 import (
 	"net/http"
@@ -14,7 +14,12 @@ const (
 	CtxRole   = "role"
 )
 
-func JWTAuth(authService *service.AuthService) gin.HandlerFunc {
+type tokenValidator interface {
+	ParseToken(tokenStr string, opts ...jwt.ParserOption) (*service.Claims, error)
+	IsBlacklisted(jti string) (bool, error)
+}
+
+func JWTAuth(v tokenValidator) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
 		if !strings.HasPrefix(authHeader, "Bearer ") {
@@ -22,7 +27,7 @@ func JWTAuth(authService *service.AuthService) gin.HandlerFunc {
 			return
 		}
 
-		claims, err := authService.ParseToken(
+		claims, err := v.ParseToken(
 			strings.TrimPrefix(authHeader, "Bearer "),
 			jwt.WithIssuer(service.Issuer),
 			jwt.WithAudience(service.Audience),
@@ -33,7 +38,7 @@ func JWTAuth(authService *service.AuthService) gin.HandlerFunc {
 			return
 		}
 
-		blacklisted, err := authService.IsBlacklisted(claims.ID)
+		blacklisted, err := v.IsBlacklisted(claims.ID)
 		if err != nil || blacklisted {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "token revoked"})
 			return

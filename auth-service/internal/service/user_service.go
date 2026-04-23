@@ -3,9 +3,15 @@ package service
 import (
 	"errors"
 
-	"github.com/dungpd/seta/auth-service/internal/model"
+	"github.com/dungpd/seta/auth-service/internal/domain"
 	"golang.org/x/crypto/bcrypt"
 )
+
+type UserRepo interface {
+	Create(*domain.User) error
+	FindByEmail(string) (*domain.User, error)
+	FindAll() ([]domain.User, error)
+}
 
 type UserService struct {
 	repo UserRepo
@@ -15,11 +21,11 @@ func NewUserService(repo UserRepo) *UserService {
 	return &UserService{repo: repo}
 }
 
-func (s *UserService) ListAll() ([]model.User, error) {
+func (s *UserService) ListAll() ([]domain.User, error) {
 	return s.repo.FindAll()
 }
 
-func (s *UserService) Register(username, email, password, role string) (*model.User, error) {
+func (s *UserService) Register(username, email, password, role string) (*domain.User, error) {
 	existing, err := s.repo.FindByEmail(email)
 	if err != nil {
 		return nil, err
@@ -33,7 +39,7 @@ func (s *UserService) Register(username, email, password, role string) (*model.U
 		return nil, err
 	}
 
-	user := &model.User{
+	user := &domain.User{
 		Username:     username,
 		Email:        email,
 		PasswordHash: string(hash),
@@ -45,7 +51,7 @@ func (s *UserService) Register(username, email, password, role string) (*model.U
 	return user, nil
 }
 
-func (s *UserService) Login(email, password string) (*model.User, error) {
+func (s *UserService) Login(email, password string) (*domain.User, error) {
 	user, err := s.repo.FindByEmail(email)
 	if err != nil {
 		return nil, err

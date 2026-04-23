@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/dungpd/seta/auth-service/internal/model"
+	"github.com/dungpd/seta/auth-service/internal/domain"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
@@ -23,6 +23,13 @@ type Claims struct {
 	Role string `json:"role"`
 	Type string `json:"typ,omitempty"`
 	jwt.RegisteredClaims
+}
+
+type RefreshTokenRepo interface {
+	Insert(*domain.RefreshToken) error
+	MarkRevoked(jti string) error
+	IsValid(jti string) (bool, error)
+	RevokeAllForUser(userID string) error
 }
 
 type AuthService struct {
@@ -86,7 +93,7 @@ func (s *AuthService) GenerateTokenPair(userID, role string) (accessToken, refre
 		return
 	}
 
-	err = s.refreshRepo.Insert(&model.RefreshToken{
+	err = s.refreshRepo.Insert(&domain.RefreshToken{
 		JTI:       refreshJTI,
 		UserID:    userID,
 		ExpiresAt: now.Add(refreshTokenTTL),

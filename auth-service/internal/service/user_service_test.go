@@ -3,7 +3,7 @@ package service_test
 import (
 	"testing"
 
-	"github.com/dungpd/seta/auth-service/internal/model"
+	"github.com/dungpd/seta/auth-service/internal/domain"
 	"github.com/dungpd/seta/auth-service/internal/service"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -109,7 +109,7 @@ func TestLogin_UserNotFound(t *testing.T) {
 
 func TestListAll(t *testing.T) {
 	repo := &mockUserRepo{
-		users: []*model.User{
+		users: []*domain.User{
 			{UserID: "1", Username: "a", Email: "a@x.com", Role: "member"},
 			{UserID: "2", Username: "b", Email: "b@x.com", Role: "manager"},
 		},

@@ -4,16 +4,16 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/dungpd/seta/auth-service/internal/model"
+	"github.com/dungpd/seta/auth-service/internal/domain"
 )
 
 type mockUserRepo struct {
 	mu        sync.Mutex
-	users     []*model.User
+	users     []*domain.User
 	createErr error
 }
 
-func (m *mockUserRepo) Create(u *model.User) error {
+func (m *mockUserRepo) Create(u *domain.User) error {
 	if m.createErr != nil {
 		return m.createErr
 	}
@@ -24,7 +24,7 @@ func (m *mockUserRepo) Create(u *model.User) error {
 	return nil
 }
 
-func (m *mockUserRepo) FindByEmail(email string) (*model.User, error) {
+func (m *mockUserRepo) FindByEmail(email string) (*domain.User, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, u := range m.users {
@@ -36,10 +36,10 @@ func (m *mockUserRepo) FindByEmail(email string) (*model.User, error) {
 	return nil, nil
 }
 
-func (m *mockUserRepo) FindAll() ([]model.User, error) {
+func (m *mockUserRepo) FindAll() ([]domain.User, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	result := make([]model.User, len(m.users))
+	result := make([]domain.User, len(m.users))
 	for i, u := range m.users {
 		result[i] = *u
 	}
@@ -48,15 +48,15 @@ func (m *mockUserRepo) FindAll() ([]model.User, error) {
 
 type mockRefreshTokenRepo struct {
 	mu         sync.Mutex
-	tokens     map[string]*model.RefreshToken
+	tokens     map[string]*domain.RefreshToken
 	revokedAll []string
 }
 
 func newMockRefreshRepo() *mockRefreshTokenRepo {
-	return &mockRefreshTokenRepo{tokens: make(map[string]*model.RefreshToken)}
+	return &mockRefreshTokenRepo{tokens: make(map[string]*domain.RefreshToken)}
 }
 
-func (m *mockRefreshTokenRepo) Insert(t *model.RefreshToken) error {
+func (m *mockRefreshTokenRepo) Insert(t *domain.RefreshToken) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	cp := *t
