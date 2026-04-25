@@ -15,7 +15,10 @@ func initServices(
 ) (*auth.Handler, *user.Handler, auth.Service) {
 	userRepo := user.NewRepository(dbPool)
 	refreshRepo := auth.NewRefreshTokenRepository(dbPool)
-	userSvc := user.NewService(userRepo)
+	userSvc := user.NewService(
+		userRepo,
+		user.WithWorkers(cfg.ImportWorkers),
+	)
 	authSvc := auth.NewService(refreshRepo, cfg.PrivateKey, cfg.PublicKey, rdb)
 	return auth.NewHandler(userSvc, authSvc), user.NewHandler(userSvc), authSvc
 }

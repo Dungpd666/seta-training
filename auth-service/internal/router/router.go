@@ -62,4 +62,5 @@ func registerUserRoutes(rg *gin.RouterGroup, h *user.Handler, v middleware.Token
 	protected := rg.Group("/")
 	protected.Use(middleware.JWTAuth(v))
 	protected.GET("/users", h.ListUsers)
+	protected.POST("/users/import", h.ImportUsers)
 }
