@@ -6,6 +6,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"os"
+	"strconv"
 )
 
 type Config struct {
@@ -15,6 +16,7 @@ type Config struct {
 	RedisURL       string
 	PrivateKey     *rsa.PrivateKey
 	PublicKey      *rsa.PublicKey
+	ImportWorkers  int
 }
 
 func Load() (*Config, error) {
@@ -40,6 +42,7 @@ func Load() (*Config, error) {
 		RedisURL:       getenv("REDIS_URL", "redis://localhost:6379/0"),
 		PrivateKey:     privateKey,
 		PublicKey:      publicKey,
+		ImportWorkers:  getenvInt("IMPORT_WORKERS", 5),
 	}, nil
 }
 
@@ -56,6 +59,18 @@ func getenv(key, defaultVal string) string {
 		return v
 	}
 	return defaultVal
+}
+
+func getenvInt(key string, defaultVal int) int {
+	v := os.Getenv(key)
+	if v == "" {
+		return defaultVal
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n <= 0 {
+		return defaultVal
+	}
+	return n
 }
 
 func loadPrivateKey() (*rsa.PrivateKey, error) {
