@@ -1,7 +1,6 @@
 package initialize
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/dungpd/seta/core-service/internal/config"
@@ -25,16 +24,15 @@ func Run() error {
 	}
 	defer dbPool.Close()
 
-	_, err = Redis(cfg.RedisURL)
+	rdb, err := Redis(cfg.RedisURL)
 	if err != nil {
 		return fmt.Errorf("redis: %w", err)
 	}
 	log.Info().Msg("connected to redis")
 
-	projectionRepo := initProjectionRepo(dbPool)
-	StartUserEventConsumer(context.Background(), cfg.KafkaBrokers, projectionRepo)
+	teamHandler, jwks := initServices(cfg, dbPool, rdb)
 
-	r := router.New()
+	r := router.New(jwks, rdb, teamHandler)
 	log.Info().Str("port", cfg.Port).Msg("starting core-service")
 	return r.Run(":" + cfg.Port)
 }

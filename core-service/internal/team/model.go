@@ -20,3 +20,9 @@ type UserProjection struct {
 	Email    string
 	Role     string
 }
+
+type Team struct {
+	TeamID    string `json:"team_id"`
+	TeamName  string `json:"team_name"`
+	CreatedBy string `json:"created_by"`
+}
