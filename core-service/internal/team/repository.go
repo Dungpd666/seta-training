@@ -16,6 +16,7 @@ type TeamRepository interface {
 	AddMember(ctx context.Context, teamID, userID string, role string) error
 	RemoveMember(ctx context.Context, teamID, userID string) error
 	GetMemberRole(ctx context.Context, teamID, userID string) (string, error)
+	GetByID(ctx context.Context, teamID string) (*Team, error)
 }
 
 type projectionRepo struct {
@@ -83,4 +84,16 @@ func (r *teamRepo) GetMemberRole(ctx context.Context, teamID, userID string) (st
 		TeamID: teamID,
 		UserID: userID,
 	})
+}
+
+func (r *teamRepo) GetByID(ctx context.Context, teamID string) (*Team, error) {
+	row, err := r.q.GetTeamByID(ctx, teamID)
+	if err != nil {
+		return nil, err
+	}
+	return &Team{
+		TeamID:    row.TeamID,
+		TeamName:  row.TeamName,
+		CreatedBy: row.CreatedBy,
+	}, nil
 }

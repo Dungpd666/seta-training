@@ -80,3 +80,44 @@ func (h *Handler) RemoveMember(c *gin.Context) {
 	}
 	c.Status(http.StatusNoContent)
 }
+
+func (h *Handler) AddManager(c *gin.Context) {
+	teamID := c.Param("id")
+	callerID, _ := c.Get("user_id")
+
+	var body struct {
+		UserID string `json:"user_id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Error(c, http.StatusBadRequest, response.ErrBadRequest, "user_id is required")
+		return
+	}
+
+	err := h.svc.PromoteToManager(c.Request.Context(), teamID, callerID.(string), body.UserID)
+	if errors.Is(err, ErrNotTeamCreator) {
+		response.Error(c, http.StatusForbidden, "FORBIDDEN", err.Error())
+		return
+	}
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, response.ErrBadRequest, err.Error())
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
+func (h *Handler) RemoveManager(c *gin.Context) {
+	teamID := c.Param("id")
+	targetUserID := c.Param("userId")
+	callerID, _ := c.Get("user_id")
+
+	err := h.svc.DemoteFromManager(c.Request.Context(), teamID, callerID.(string), targetUserID)
+	if errors.Is(err, ErrNotTeamCreator) || errors.Is(err, ErrCannotDemoteCreator) {
+		response.Error(c, http.StatusForbidden, "FORBIDDEN", err.Error())
+		return
+	}
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, response.ErrBadRequest, err.Error())
+		return
+	}
+	c.Status(http.StatusNoContent)
+}

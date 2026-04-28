@@ -20,7 +20,9 @@ func New(jwks *middleware.JWKSClient, rdb *redis.Client, teamHandler *team.Handl
 	{
 		v1.POST("/teams", teamHandler.CreateTeam)
 		v1.POST("/teams/:id/members", teamHandler.AddMember)
+		v1.POST("/teams/:id/managers", teamHandler.AddManager)
 		v1.DELETE("/teams/:id/members/:userId", teamHandler.RemoveMember)
+		v1.DELETE("/teams/:id/managers/:userId", teamHandler.RemoveManager)
 	}
 
 	return r
