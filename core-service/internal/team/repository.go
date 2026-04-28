@@ -14,6 +14,8 @@ type ProjectionRepository interface {
 type TeamRepository interface {
 	Create(ctx context.Context, teamName, createdBy string) (*Team, error)
 	AddMember(ctx context.Context, teamID, userID string, role string) error
+	RemoveMember(ctx context.Context, teamID, userID string) error
+	GetMemberRole(ctx context.Context, teamID, userID string) (string, error)
 }
 
 type projectionRepo struct {
@@ -66,5 +68,19 @@ func (r *teamRepo) AddMember(ctx context.Context, teamID, userID string, role st
 		TeamID: teamID,
 		UserID: userID,
 		Role:   role,
+	})
+}
+
+func (r *teamRepo) RemoveMember(ctx context.Context, teamID, userID string) error {
+	return r.q.RemoveTeamMember(ctx, db.RemoveTeamMemberParams{
+		TeamID: teamID,
+		UserID: userID,
+	})
+}
+
+func (r *teamRepo) GetMemberRole(ctx context.Context, teamID, userID string) (string, error) {
+	return r.q.GetMemberRole(ctx, db.GetMemberRoleParams{
+		TeamID: teamID,
+		UserID: userID,
 	})
 }

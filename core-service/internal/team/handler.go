@@ -1,6 +1,7 @@
 package team
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/dungpd/seta/core-service/internal/response"
@@ -37,4 +38,45 @@ func (h *Handler) CreateTeam(c *gin.Context) {
 	}
 
 	response.SuccessWithStatus(c, http.StatusCreated, team)
+}
+
+func (h *Handler) AddMember(c *gin.Context) {
+	teamID := c.Param("id")
+	callerID, _ := c.Get("user_id")
+
+	var body struct {
+		UserID string `json:"user_id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Error(c, http.StatusBadRequest, response.ErrBadRequest, "user_id is required")
+		return
+	}
+
+	err := h.svc.AddMember(c.Request.Context(), teamID, callerID.(string), body.UserID)
+	if errors.Is(err, ErrNotTeamManager) {
+		response.Error(c, http.StatusForbidden, "FORBIDDEN", err.Error())
+		return
+	}
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, response.ErrBadRequest, err.Error())
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
+func (h *Handler) RemoveMember(c *gin.Context) {
+	teamID := c.Param("id")
+	targetUserID := c.Param("userId")
+	callerID, _ := c.Get("user_id")
+
+	err := h.svc.RemoveMember(c.Request.Context(), teamID, callerID.(string), targetUserID)
+	if errors.Is(err, ErrNotTeamManager) {
+		response.Error(c, http.StatusForbidden, "FORBIDDEN", err.Error())
+		return
+	}
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, response.ErrBadRequest, err.Error())
+		return
+	}
+	c.Status(http.StatusNoContent)
 }
