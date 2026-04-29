@@ -24,3 +24,14 @@
       role    TEXT NOT NULL,
       PRIMARY KEY (team_id, user_id)
   );
+
+  CREATE TABLE assets (
+    asset_id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    owner_id TEXT NOT NULL,
+    parent_id TEXT REFERENCES assets(asset_id) ON DELETE CASCADE,
+    type VARCHAR(10) NOT NULL CHECK (type IN ('folder', 'note')),
+    title TEXT NOT NULL,
+    content TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+

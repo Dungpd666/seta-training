@@ -30,9 +30,9 @@ func Run() error {
 	}
 	log.Info().Msg("connected to redis")
 
-	teamHandler, jwks := initServices(cfg, dbPool, rdb)
+	teamHandler, assetHandler, jwks := initServices(cfg, dbPool, rdb)
 
-	r := router.New(jwks, rdb, teamHandler)
+	r := router.New(jwks, rdb, teamHandler, assetHandler)
 	log.Info().Str("port", cfg.Port).Msg("starting core-service")
 	return r.Run(":" + cfg.Port)
 }
