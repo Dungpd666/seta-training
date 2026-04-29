@@ -1,0 +1,26 @@
+  CREATE TABLE users_projection (
+      user_id    TEXT PRIMARY KEY,
+      username   TEXT NOT NULL,
+      email      TEXT NOT NULL UNIQUE,
+      role       TEXT NOT NULL,
+      deleted_at TIMESTAMPTZ,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+
+  CREATE TABLE teams (
+      team_id    TEXT PRIMARY KEY DEFAULT
+  gen_random_uuid()::text,
+      team_name  TEXT NOT NULL,
+      created_by TEXT NOT NULL REFERENCES
+  users_projection(user_id),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+
+  CREATE TABLE team_members (
+      team_id TEXT NOT NULL REFERENCES teams(team_id) ON DELETE
+  CASCADE,
+      user_id TEXT NOT NULL REFERENCES
+  users_projection(user_id),
+      role    TEXT NOT NULL,
+      PRIMARY KEY (team_id, user_id)
+  );
