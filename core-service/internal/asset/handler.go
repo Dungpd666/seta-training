@@ -44,9 +44,14 @@ func (h *Handler) Create(c *gin.Context) {
 
 func (h *Handler) GetByID(c *gin.Context) {
 	assetID := c.Param("id")
-	asset, err := h.svc.GetByID(c.Request.Context(), assetID)
+	callerID, _ := c.Get("user_id")
+	asset, err := h.svc.GetByID(c.Request.Context(), callerID.(string), assetID)
 	if errors.Is(err, ErrNotFound) {
 		response.Error(c, http.StatusNotFound, response.ErrNotFound, err.Error())
+		return
+	}
+	if errors.Is(err, ErrForbidden) {
+		response.Error(c, http.StatusForbidden, response.ErrForbidden, err.Error())
 		return
 	}
 	if err != nil {

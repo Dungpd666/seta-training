@@ -7,9 +7,15 @@ import (
 
 var (
 	ErrNotFound    = errors.New("asset not found")
-	ErrForbidden   = errors.New("only owner can modify this asset")
+	ErrForbidden   = errors.New("forbidden: insufficient permissions")
 	ErrInvalidType = errors.New("invalid asset type")
 )
+
+type AssetACL struct {
+	AssetID     string `json:"asset_id"`
+	UserID      string `json:"user_id"`
+	AccessLevel string `json:"access_level"`
+}
 
 type Asset struct {
 	AssetID   string    `json:"asset_id"`

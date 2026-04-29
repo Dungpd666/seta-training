@@ -14,6 +14,7 @@ type Repository interface {
 	GetByID(ctx context.Context, assetID string) (*Asset, error)
 	Update(ctx context.Context, assetID, title string, content *string) (*Asset, error)
 	Delete(ctx context.Context, assetID string) error
+	GetACLEntry(ctx context.Context, assetID, userID string) (*AssetACL, error)
 }
 
 type repo struct {
@@ -81,6 +82,17 @@ func (r *repo) Update(ctx context.Context, assetID, title string, content *strin
 
 func (r *repo) Delete(ctx context.Context, assetID string) error {
 	return r.q.DeleteAsset(ctx, assetID)
+}
+
+func (r *repo) GetACLEntry(ctx context.Context, assetID, userID string) (*AssetACL, error) {
+	row, err := r.q.GetAssetACL(ctx, assetID, userID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &AssetACL{AssetID: row.AssetID, UserID: row.UserID, AccessLevel: row.AccessLevel}, nil
 }
 
 func rowToAsset(row db.Asset) *Asset {
