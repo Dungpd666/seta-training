@@ -12,7 +12,7 @@ type Handler struct {
 	svc Service
 }
 
-func NewHandler(svc Service) *Handler {
+func NewTeamHandler(svc Service) *Handler {
 	return &Handler{svc: svc}
 }
 
