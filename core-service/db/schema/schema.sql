@@ -35,3 +35,10 @@
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+  CREATE TABLE asset_acl (
+    asset_id     TEXT NOT NULL REFERENCES assets(asset_id) ON DELETE CASCADE,
+    user_id      TEXT NOT NULL,
+    access_level TEXT NOT NULL CHECK (access_level IN ('read', 'write')),
+    PRIMARY KEY (asset_id, user_id)
+);
+

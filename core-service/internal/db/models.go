@@ -18,6 +18,12 @@ type Asset struct {
 	CreatedAt pgtype.Timestamptz
 }
 
+type AssetAcl struct {
+	AssetID     string
+	UserID      string
+	AccessLevel string
+}
+
 type Team struct {
 	TeamID    string
 	TeamName  string

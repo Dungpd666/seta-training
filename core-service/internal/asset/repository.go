@@ -85,7 +85,10 @@ func (r *repo) Delete(ctx context.Context, assetID string) error {
 }
 
 func (r *repo) GetACLEntry(ctx context.Context, assetID, userID string) (*AssetACL, error) {
-	row, err := r.q.GetAssetACL(ctx, assetID, userID)
+	row, err := r.q.GetAssetACL(ctx, db.GetAssetACLParams{
+		AssetID: assetID,
+		UserID:  userID,
+	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
