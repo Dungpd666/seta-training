@@ -3,7 +3,7 @@ package asset
 import "context"
 
 type Service interface {
-	Create(ctx context.Context, ownerID string, parentID *string, assetType, title string, content *string) (*Asset, error)
+	Create(ctx context.Context, callerID string, parentID *string, assetType, title string, content *string) (*Asset, error)
 	GetByID(ctx context.Context, callerID, assetID string) (*Asset, error)
 	Update(ctx context.Context, callerID, assetID, title string, content *string) (*Asset, error)
 	Delete(ctx context.Context, callerID, assetID string) error
@@ -19,11 +19,11 @@ func NewService(repo Repository) Service {
 	return &service{repo: repo}
 }
 
-func (s *service) Create(ctx context.Context, ownerID string, parentID *string, assetType, title string, content *string) (*Asset, error) {
+func (s *service) Create(ctx context.Context, callerID string, parentID *string, assetType, title string, content *string) (*Asset, error) {
 	if assetType != "note" && assetType != "folder" {
 		return nil, ErrInvalidType
 	}
-	return s.repo.Create(ctx, ownerID, parentID, assetType, title, content)
+	return s.repo.Create(ctx, callerID, parentID, assetType, title, content)
 }
 
 func (s *service) GetByID(ctx context.Context, callerID, assetID string) (*Asset, error) {
