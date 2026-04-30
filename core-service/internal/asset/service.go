@@ -7,6 +7,8 @@ type Service interface {
 	GetByID(ctx context.Context, callerID, assetID string) (*Asset, error)
 	Update(ctx context.Context, callerID, assetID, title string, content *string) (*Asset, error)
 	Delete(ctx context.Context, callerID, assetID string) error
+	Share(ctx context.Context, callerID, assetID, targetUserID, accessLevel string) error
+	RevokeShare(ctx context.Context, callerID, assetID, targetUserID string) error
 }
 
 type service struct {
@@ -74,6 +76,56 @@ func (s *service) requireWriteAccess(ctx context.Context, asset *Asset, callerID
 	}
 	if acl == nil || acl.AccessLevel != "write" {
 		return ErrForbidden
+	}
+	return nil
+}
+
+func (s *service) Share(ctx context.Context, callerID, assetID, targetUserID, accessLevel string) error {
+	asset, err := s.repo.GetByID(ctx, assetID)
+	if err != nil {
+		return err
+	}
+	if err := s.requireWriteAccess(ctx, asset, callerID); err != nil {
+		return err
+	}
+	if err := s.repo.UpsertACLEntry(ctx, assetID, targetUserID, accessLevel); err != nil {
+		return err
+	}
+	if asset.Type == "folder" {
+		descendants, err := s.repo.GetDescendantIDs(ctx, assetID)
+		if err != nil {
+			return err
+		}
+		for _, childID := range descendants {
+			if err := s.repo.UpsertACLEntry(ctx, childID, targetUserID, accessLevel); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (s *service) RevokeShare(ctx context.Context, callerID, assetID, targetUserID string) error {
+	asset, err := s.repo.GetByID(ctx, assetID)
+	if err != nil {
+		return err
+	}
+	if err := s.requireWriteAccess(ctx, asset, callerID); err != nil {
+		return err
+	}
+	if err := s.repo.DeleteACLEntry(ctx, assetID, targetUserID); err != nil {
+		return err
+	}
+	if asset.Type == "folder" {
+		descendants, err := s.repo.GetDescendantIDs(ctx, assetID)
+		if err != nil {
+			return err
+		}
+		for _, childID := range descendants {
+			if err := s.repo.DeleteACLEntry(ctx, childID, targetUserID); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }

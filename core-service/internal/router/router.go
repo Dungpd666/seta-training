@@ -24,10 +24,12 @@ func New(jwks *middleware.JWKSClient, rdb *redis.Client, teamHandler *team.Handl
 		v1.POST("/teams", teamHandler.CreateTeam)
 		v1.POST("/teams/:id/members", teamHandler.AddMember)
 		v1.POST("/teams/:id/managers", teamHandler.AddManager)
+		v1.POST("/assets/:id/share", assetHandler.Share)
 		v1.PUT("/assets/:id", assetHandler.Update)
 		v1.DELETE("/assets/:id", assetHandler.Delete)
 		v1.DELETE("/teams/:id/members/:userId", teamHandler.RemoveMember)
 		v1.DELETE("/teams/:id/managers/:userId", teamHandler.RemoveManager)
+		v1.DELETE("/assets/:id/share/:userId", assetHandler.RevokeShare)
 	}
 
 	return r

@@ -15,6 +15,9 @@ type Repository interface {
 	Update(ctx context.Context, assetID, title string, content *string) (*Asset, error)
 	Delete(ctx context.Context, assetID string) error
 	GetACLEntry(ctx context.Context, assetID, userID string) (*AssetACL, error)
+	UpsertACLEntry(ctx context.Context, assetID, userID, accessLevel string) error
+	DeleteACLEntry(ctx context.Context, assetID, userID string) error
+	GetDescendantIDs(ctx context.Context, assetID string) ([]string, error)
 }
 
 type repo struct {
@@ -96,6 +99,27 @@ func (r *repo) GetACLEntry(ctx context.Context, assetID, userID string) (*AssetA
 		return nil, err
 	}
 	return &AssetACL{AssetID: row.AssetID, UserID: row.UserID, AccessLevel: row.AccessLevel}, nil
+}
+
+func (r *repo) UpsertACLEntry(ctx context.Context, assetID, userID, accessLevel string) error {
+	return r.q.UpsertAssetACL(ctx, db.UpsertAssetACLParams{
+		AssetID:     assetID,
+		UserID:      userID,
+		AccessLevel: accessLevel,
+	})
+}
+
+func (r *repo) DeleteACLEntry(ctx context.Context, assetID, userID string) error {
+	return r.q.DeleteAssetACLEntry(ctx, db.DeleteAssetACLEntryParams{
+		AssetID: assetID,
+		UserID:  userID,
+	})
+}
+
+func (r *repo) GetDescendantIDs(ctx context.Context, assetID string) ([]string, error) {
+	var pgParentID pgtype.Text
+	pgParentID.Scan(assetID)
+	return r.q.GetDescendantIDs(ctx, pgParentID)
 }
 
 func rowToAsset(row db.Asset) *Asset {

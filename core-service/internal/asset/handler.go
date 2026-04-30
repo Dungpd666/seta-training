@@ -108,3 +108,53 @@ func (h *Handler) Delete(c *gin.Context) {
 	}
 	c.Status(http.StatusNoContent)
 }
+
+func (h *Handler) Share(c *gin.Context) {
+	assetID := c.Param("id")
+	callerID, _ := c.Get("user_id")
+
+	var body struct {
+		UserID      string `json:"userId" binding:"required"`
+		AccessLevel string `json:"access" binding:"required,oneof=read write"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Error(c, http.StatusBadRequest, response.ErrBadRequest, err.Error())
+		return
+	}
+
+	err := h.svc.Share(c.Request.Context(), callerID.(string), assetID, body.UserID, body.AccessLevel)
+	if errors.Is(err, ErrNotFound) {
+		response.Error(c, http.StatusNotFound, response.ErrNotFound, err.Error())
+		return
+	}
+	if errors.Is(err, ErrForbidden) {
+		response.Error(c, http.StatusForbidden, response.ErrForbidden, err.Error())
+		return
+	}
+	if err != nil {
+		response.Error(c, http.StatusInternalServerError, response.ErrInternal, err.Error())
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
+func (h *Handler) RevokeShare(c *gin.Context) {
+	assetID := c.Param("id")
+	targetUserID := c.Param("userId")
+	callerID, _ := c.Get("user_id")
+
+	err := h.svc.RevokeShare(c.Request.Context(), callerID.(string), assetID, targetUserID)
+	if errors.Is(err, ErrNotFound) {
+		response.Error(c, http.StatusNotFound, response.ErrNotFound, err.Error())
+		return
+	}
+	if errors.Is(err, ErrForbidden) {
+		response.Error(c, http.StatusForbidden, response.ErrForbidden, err.Error())
+		return
+	}
+	if err != nil {
+		response.Error(c, http.StatusInternalServerError, response.ErrInternal, err.Error())
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
