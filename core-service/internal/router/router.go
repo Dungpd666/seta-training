@@ -12,6 +12,7 @@ import (
 
 func New(jwks *middleware.JWKSClient, rdb *redis.Client, teamHandler *team.Handler, assetHandler *asset.Handler) *gin.Engine {
 	r := gin.Default()
+	r.Use(middleware.RequestID())
 
 	r.GET("/health", func(c *gin.Context) {
 		c.Status(http.StatusOK)

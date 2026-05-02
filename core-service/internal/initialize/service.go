@@ -12,11 +12,11 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-func initServices(cfg *config.Config, dbPool *pgxpool.Pool, rdb *redis.Client) (*team.Handler, *asset.Handler, *middleware.JWKSClient) {
+func initServices(ctx context.Context, cfg *config.Config, dbPool *pgxpool.Pool, rdb *redis.Client) (*team.Handler, *asset.Handler, *middleware.JWKSClient) {
 	q := db.New(dbPool)
 
 	projectionRepo := team.NewProjectionRepository(q)
-	StartUserEventConsumer(context.Background(), cfg.KafkaBrokers, projectionRepo)
+	StartUserEventConsumer(ctx, cfg.KafkaBrokers, projectionRepo)
 	teamRepo := team.NewTeamRepository(q)
 	teamSvc := team.NewTeamService(teamRepo)
 	teamHandler := team.NewTeamHandler(teamSvc)
