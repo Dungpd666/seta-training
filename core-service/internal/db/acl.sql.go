@@ -45,10 +45,11 @@ func (q *Queries) GetAssetACL(ctx context.Context, arg GetAssetACLParams) (Asset
 
 const getDescendantIDs = `-- name: GetDescendantIDs :many
 WITH RECURSIVE descendants AS (
-    SELECT b.asset_id FROM assets b WHERE b.parent_id = $1
+    SELECT b.asset_id, 1 AS depth FROM assets b WHERE b.parent_id = $1
     UNION ALL
-    SELECT a.asset_id FROM assets a
+    SELECT a.asset_id, d.depth + 1 FROM assets a
     JOIN descendants d ON a.parent_id = d.asset_id
+    WHERE d.depth < 20
 )
 SELECT asset_id FROM descendants
 `
