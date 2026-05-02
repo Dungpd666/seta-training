@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/dungpd/seta/core-service/internal/middleware"
 	"github.com/dungpd/seta/core-service/internal/response"
 	"github.com/gin-gonic/gin"
 )
@@ -25,15 +26,20 @@ func (h *Handler) CreateTeam(c *gin.Context) {
 		return
 	}
 
-	if role, _ := c.Get("role"); role != "manager" {
-		response.Error(c, http.StatusForbidden, "FORBIDDEN", "only manager can create team")
+	role, ok := middleware.CallerRole(c)
+	if !ok || role != RoleManager {
+		response.Error(c, http.StatusForbidden, response.ErrForbidden, "only manager can create team")
 		return
 	}
 
-	userID, _ := c.Get("user_id")
-	team, err := h.svc.CreateTeam(c.Request.Context(), userID.(string), body.TeamName)
+	callerID, ok := middleware.CallerID(c)
+	if !ok {
+		response.Error(c, http.StatusUnauthorized, response.ErrUnauthorized, "missing caller")
+		return
+	}
+	team, err := h.svc.CreateTeam(c.Request.Context(), callerID, body.TeamName)
 	if err != nil {
-		response.Error(c, http.StatusBadRequest, response.ErrBadRequest, err.Error())
+		response.Error(c, http.StatusInternalServerError, response.ErrInternal, err.Error())
 		return
 	}
 
@@ -42,7 +48,11 @@ func (h *Handler) CreateTeam(c *gin.Context) {
 
 func (h *Handler) AddMember(c *gin.Context) {
 	teamID := c.Param("id")
-	callerID, _ := c.Get("user_id")
+	callerID, ok := middleware.CallerID(c)
+	if !ok {
+		response.Error(c, http.StatusUnauthorized, response.ErrUnauthorized, "missing caller")
+		return
+	}
 
 	var body struct {
 		UserID string `json:"user_id" binding:"required"`
@@ -52,13 +62,21 @@ func (h *Handler) AddMember(c *gin.Context) {
 		return
 	}
 
-	err := h.svc.AddMember(c.Request.Context(), teamID, callerID.(string), body.UserID)
+	err := h.svc.AddMember(c.Request.Context(), teamID, callerID, body.UserID)
 	if errors.Is(err, ErrNotTeamManager) {
-		response.Error(c, http.StatusForbidden, "FORBIDDEN", err.Error())
+		response.Error(c, http.StatusForbidden, response.ErrForbidden, err.Error())
+		return
+	}
+	if errors.Is(err, ErrTeamNotFound) {
+		response.Error(c, http.StatusNotFound, response.ErrNotFound, err.Error())
+		return
+	}
+	if errors.Is(err, ErrUserNotFound) {
+		response.Error(c, http.StatusUnprocessableEntity, response.ErrBadRequest, err.Error())
 		return
 	}
 	if err != nil {
-		response.Error(c, http.StatusBadRequest, response.ErrBadRequest, err.Error())
+		response.Error(c, http.StatusInternalServerError, response.ErrInternal, err.Error())
 		return
 	}
 	c.Status(http.StatusNoContent)
@@ -67,15 +85,23 @@ func (h *Handler) AddMember(c *gin.Context) {
 func (h *Handler) RemoveMember(c *gin.Context) {
 	teamID := c.Param("id")
 	targetUserID := c.Param("userId")
-	callerID, _ := c.Get("user_id")
+	callerID, ok := middleware.CallerID(c)
+	if !ok {
+		response.Error(c, http.StatusUnauthorized, response.ErrUnauthorized, "missing caller")
+		return
+	}
 
-	err := h.svc.RemoveMember(c.Request.Context(), teamID, callerID.(string), targetUserID)
+	err := h.svc.RemoveMember(c.Request.Context(), teamID, callerID, targetUserID)
 	if errors.Is(err, ErrNotTeamManager) {
-		response.Error(c, http.StatusForbidden, "FORBIDDEN", err.Error())
+		response.Error(c, http.StatusForbidden, response.ErrForbidden, err.Error())
+		return
+	}
+	if errors.Is(err, ErrTeamNotFound) {
+		response.Error(c, http.StatusNotFound, response.ErrNotFound, err.Error())
 		return
 	}
 	if err != nil {
-		response.Error(c, http.StatusBadRequest, response.ErrBadRequest, err.Error())
+		response.Error(c, http.StatusInternalServerError, response.ErrInternal, err.Error())
 		return
 	}
 	c.Status(http.StatusNoContent)
@@ -83,7 +109,11 @@ func (h *Handler) RemoveMember(c *gin.Context) {
 
 func (h *Handler) AddManager(c *gin.Context) {
 	teamID := c.Param("id")
-	callerID, _ := c.Get("user_id")
+	callerID, ok := middleware.CallerID(c)
+	if !ok {
+		response.Error(c, http.StatusUnauthorized, response.ErrUnauthorized, "missing caller")
+		return
+	}
 
 	var body struct {
 		UserID string `json:"user_id" binding:"required"`
@@ -93,13 +123,21 @@ func (h *Handler) AddManager(c *gin.Context) {
 		return
 	}
 
-	err := h.svc.PromoteToManager(c.Request.Context(), teamID, callerID.(string), body.UserID)
+	err := h.svc.PromoteToManager(c.Request.Context(), teamID, callerID, body.UserID)
 	if errors.Is(err, ErrNotTeamCreator) {
-		response.Error(c, http.StatusForbidden, "FORBIDDEN", err.Error())
+		response.Error(c, http.StatusForbidden, response.ErrForbidden, err.Error())
+		return
+	}
+	if errors.Is(err, ErrTeamNotFound) {
+		response.Error(c, http.StatusNotFound, response.ErrNotFound, err.Error())
+		return
+	}
+	if errors.Is(err, ErrUserNotFound) {
+		response.Error(c, http.StatusUnprocessableEntity, response.ErrBadRequest, err.Error())
 		return
 	}
 	if err != nil {
-		response.Error(c, http.StatusBadRequest, response.ErrBadRequest, err.Error())
+		response.Error(c, http.StatusInternalServerError, response.ErrInternal, err.Error())
 		return
 	}
 	c.Status(http.StatusNoContent)
@@ -108,15 +146,27 @@ func (h *Handler) AddManager(c *gin.Context) {
 func (h *Handler) RemoveManager(c *gin.Context) {
 	teamID := c.Param("id")
 	targetUserID := c.Param("userId")
-	callerID, _ := c.Get("user_id")
+	callerID, ok := middleware.CallerID(c)
+	if !ok {
+		response.Error(c, http.StatusUnauthorized, response.ErrUnauthorized, "missing caller")
+		return
+	}
 
-	err := h.svc.DemoteFromManager(c.Request.Context(), teamID, callerID.(string), targetUserID)
+	err := h.svc.DemoteFromManager(c.Request.Context(), teamID, callerID, targetUserID)
 	if errors.Is(err, ErrNotTeamCreator) || errors.Is(err, ErrCannotDemoteCreator) {
-		response.Error(c, http.StatusForbidden, "FORBIDDEN", err.Error())
+		response.Error(c, http.StatusForbidden, response.ErrForbidden, err.Error())
+		return
+	}
+	if errors.Is(err, ErrTeamNotFound) {
+		response.Error(c, http.StatusNotFound, response.ErrNotFound, err.Error())
+		return
+	}
+	if errors.Is(err, ErrNotTeamMember) {
+		response.Error(c, http.StatusUnprocessableEntity, response.ErrBadRequest, err.Error())
 		return
 	}
 	if err != nil {
-		response.Error(c, http.StatusBadRequest, response.ErrBadRequest, err.Error())
+		response.Error(c, http.StatusInternalServerError, response.ErrInternal, err.Error())
 		return
 	}
 	c.Status(http.StatusNoContent)
