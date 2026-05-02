@@ -5,10 +5,18 @@ import (
 	"time"
 )
 
+const (
+	AssetTypeFolder  = "folder"
+	AssetTypeNote    = "note"
+	AccessLevelRead  = "read"
+	AccessLevelWrite = "write"
+)
+
 var (
-	ErrNotFound    = errors.New("asset not found")
-	ErrForbidden   = errors.New("forbidden: insufficient permissions")
-	ErrInvalidType = errors.New("invalid asset type")
+	ErrNotFound          = errors.New("asset not found")
+	ErrForbidden         = errors.New("forbidden: insufficient permissions")
+	ErrInvalidType       = errors.New("invalid asset type")
+	ErrTargetUserNotFound = errors.New("target user not found")
 )
 
 type AssetACL struct {

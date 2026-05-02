@@ -1,6 +1,11 @@
 package team
 
 const (
+	RoleManager = "manager"
+	RoleMember  = "member"
+)
+
+const (
 	EventUserCreated = "USER_CREATED"
 	EventUserUpdated = "USER_UPDATED"
 	EventUserDeleted = "USER_DELETED"
