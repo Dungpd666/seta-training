@@ -18,6 +18,8 @@ type Repository interface {
 	UpsertACLEntry(ctx context.Context, assetID, userID, accessLevel string) error
 	DeleteACLEntry(ctx context.Context, assetID, userID string) error
 	GetDescendantIDs(ctx context.Context, assetID string) ([]string, error)
+	IsManagerOfOwner(ctx context.Context, callerID, ownerID string) (bool, error)
+	UserExists(ctx context.Context, userID string) (bool, error)
 }
 
 type repo struct {
@@ -118,8 +120,28 @@ func (r *repo) DeleteACLEntry(ctx context.Context, assetID, userID string) error
 
 func (r *repo) GetDescendantIDs(ctx context.Context, assetID string) ([]string, error) {
 	var pgParentID pgtype.Text
-	pgParentID.Scan(assetID)
+	if err := pgParentID.Scan(assetID); err != nil {
+		return nil, err
+	}
 	return r.q.GetDescendantIDs(ctx, pgParentID)
+}
+
+func (r *repo) IsManagerOfOwner(ctx context.Context, callerID, ownerID string) (bool, error) {
+	return r.q.IsManagerOfMember(ctx, db.IsManagerOfMemberParams{
+		UserID:   callerID,
+		UserID_2: ownerID,
+	})
+}
+
+func (r *repo) UserExists(ctx context.Context, userID string) (bool, error) {
+	_, err := r.q.GetUserProjectionByID(ctx, userID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func rowToAsset(row db.Asset) *Asset {
