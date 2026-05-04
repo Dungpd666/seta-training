@@ -24,3 +24,21 @@
       role    TEXT NOT NULL,
       PRIMARY KEY (team_id, user_id)
   );
+
+  CREATE TABLE assets (
+    asset_id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    owner_id TEXT NOT NULL REFERENCES users_projection(user_id),
+    parent_id TEXT REFERENCES assets(asset_id) ON DELETE CASCADE,
+    type VARCHAR(10) NOT NULL CHECK (type IN ('folder', 'note')),
+    title TEXT NOT NULL,
+    content TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+  CREATE TABLE asset_acl (
+    asset_id     TEXT NOT NULL REFERENCES assets(asset_id) ON DELETE CASCADE,
+    user_id      TEXT NOT NULL,
+    access_level TEXT NOT NULL CHECK (access_level IN ('read', 'write')),
+    PRIMARY KEY (asset_id, user_id)
+);
+

@@ -13,6 +13,7 @@ import (
 
 	"github.com/dungpd/seta/core-service/internal/response"
 	"github.com/gin-gonic/gin"
+	"github.com/rs/zerolog/log"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/redis/go-redis/v9"
 )
@@ -146,7 +147,9 @@ func JWTAuth(jwks *JWKSClient, rdb *redis.Client) gin.HandlerFunc {
 		}
 
 		blacklisted, err := rdb.Exists(context.Background(), "jwt:blacklist:"+claims.ID).Result()
-		if err != nil || blacklisted > 0 {
+		if err != nil {
+			log.Error().Err(err).Msg("redis blacklist check failed")
+		} else if blacklisted > 0 {
 			c.Abort()
 			response.Error(c, http.StatusUnauthorized, response.ErrUnauthorized, "token revoked")
 			return
@@ -157,3 +160,4 @@ func JWTAuth(jwks *JWKSClient, rdb *redis.Client) gin.HandlerFunc {
 		c.Next()
 	}
 }
+

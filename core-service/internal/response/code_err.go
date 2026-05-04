@@ -5,4 +5,6 @@ const (
 	ErrUnauthorized = "UNAUTHORIZED"
 	ErrConflict     = "CONFLICT"
 	ErrInternal     = "INTERNAL_ERROR"
+	ErrNotFound     = "NOT_FOUND"
+	ErrForbidden    = "FORBIDDEN"
 )

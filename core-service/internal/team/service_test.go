@@ -10,7 +10,7 @@ import (
 
 func newSvc() (team.Service, *mockTeamRepo) {
 	repo := newMockTeamRepo()
-	return team.NewService(repo), repo
+	return team.NewTeamService(repo), repo
 }
 
 func TestCreateTeam_CreatorAutoAddedAsManager(t *testing.T) {

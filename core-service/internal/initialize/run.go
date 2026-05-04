@@ -1,7 +1,11 @@
 package initialize
 
 import (
+	"context"
 	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/dungpd/seta/core-service/internal/config"
 	"github.com/dungpd/seta/core-service/internal/router"
@@ -30,9 +34,18 @@ func Run() error {
 	}
 	log.Info().Msg("connected to redis")
 
-	teamHandler, jwks := initServices(cfg, dbPool, rdb)
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		sigCh := make(chan os.Signal, 1)
+		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+		<-sigCh
+		log.Info().Msg("shutdown signal received")
+		cancel()
+	}()
 
-	r := router.New(jwks, rdb, teamHandler)
+	teamHandler, assetHandler, jwks := initServices(ctx, cfg, dbPool, rdb)
+
+	r := router.New(jwks, rdb, teamHandler, assetHandler)
 	log.Info().Str("port", cfg.Port).Msg("starting core-service")
 	return r.Run(":" + cfg.Port)
 }

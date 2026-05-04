@@ -8,6 +8,22 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type Asset struct {
+	AssetID   string
+	OwnerID   string
+	ParentID  pgtype.Text
+	Type      string
+	Title     string
+	Content   pgtype.Text
+	CreatedAt pgtype.Timestamptz
+}
+
+type AssetAcl struct {
+	AssetID     string
+	UserID      string
+	AccessLevel string
+}
+
 type Team struct {
 	TeamID    string
 	TeamName  string

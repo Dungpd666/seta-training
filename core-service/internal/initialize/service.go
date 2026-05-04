@@ -3,6 +3,7 @@ package initialize
 import (
 	"context"
 
+	"github.com/dungpd/seta/core-service/internal/asset"
 	"github.com/dungpd/seta/core-service/internal/config"
 	"github.com/dungpd/seta/core-service/internal/db"
 	"github.com/dungpd/seta/core-service/internal/middleware"
@@ -11,16 +12,20 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-func initServices(cfg *config.Config, dbPool *pgxpool.Pool, rdb *redis.Client) (*team.Handler, *middleware.JWKSClient) {
+func initServices(ctx context.Context, cfg *config.Config, dbPool *pgxpool.Pool, rdb *redis.Client) (*team.Handler, *asset.Handler, *middleware.JWKSClient) {
 	q := db.New(dbPool)
 
 	projectionRepo := team.NewProjectionRepository(q)
-	StartUserEventConsumer(context.Background(), cfg.KafkaBrokers, projectionRepo)
+	StartUserEventConsumer(ctx, cfg.KafkaBrokers, projectionRepo)
 	teamRepo := team.NewTeamRepository(q)
-	teamSvc := team.NewService(teamRepo)
-	teamHandler := team.NewHandler(teamSvc)
+	teamSvc := team.NewTeamService(teamRepo)
+	teamHandler := team.NewTeamHandler(teamSvc)
+
+	assetRepo := asset.NewRepository(q)
+	assetSvc := asset.NewService(assetRepo)
+	assetHandler := asset.NewHandler(assetSvc)
 
 	jwks := middleware.NewJWKSClient(cfg.JWKSUrl)
 
-	return teamHandler, jwks
+	return teamHandler, assetHandler, jwks
 }
