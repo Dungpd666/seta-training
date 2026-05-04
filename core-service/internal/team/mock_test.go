@@ -56,3 +56,7 @@ func (m *mockTeamRepo) GetMemberRole(_ context.Context, teamID, userID string) (
 	}
 	return role, nil
 }
+
+func (m *mockTeamRepo) GetUserByID(_ context.Context, userID string) (*team.UserProjection, error) {
+	return &team.UserProjection{UserID: userID}, nil
+}
