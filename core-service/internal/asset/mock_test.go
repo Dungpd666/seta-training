@@ -1,0 +1,94 @@
+package asset_test
+
+import (
+	"context"
+
+	"github.com/dungpd/seta/core-service/internal/asset"
+	"github.com/google/uuid"
+)
+
+type upsertCall struct {
+	assetID, userID, accessLevel string
+}
+
+type mockAssetRepo struct {
+	assets      map[string]*asset.Asset
+	acls        map[string]*asset.AssetACL
+	descendants map[string][]string
+	managers    map[string]bool
+	users       map[string]bool
+	upsertCalls []upsertCall
+}
+
+func newMockAssetRepo() *mockAssetRepo {
+	return &mockAssetRepo{
+		assets:      make(map[string]*asset.Asset),
+		acls:        make(map[string]*asset.AssetACL),
+		descendants: make(map[string][]string),
+		managers:    make(map[string]bool),
+		users:       make(map[string]bool),
+	}
+}
+
+func (m *mockAssetRepo) Create(_ context.Context, ownerID string, parentID *string, assetType, title string, content *string) (*asset.Asset, error) {
+	a := &asset.Asset{
+		AssetID:  uuid.NewString(),
+		OwnerID:  ownerID,
+		ParentID: parentID,
+		Type:     assetType,
+		Title:    title,
+		Content:  content,
+	}
+	m.assets[a.AssetID] = a
+	return a, nil
+}
+
+func (m *mockAssetRepo) GetByID(_ context.Context, assetID string) (*asset.Asset, error) {
+	a, ok := m.assets[assetID]
+	if !ok {
+		return nil, asset.ErrNotFound
+	}
+	return a, nil
+}
+
+func (m *mockAssetRepo) Update(_ context.Context, assetID, title string, content *string) (*asset.Asset, error) {
+	a, ok := m.assets[assetID]
+	if !ok {
+		return nil, asset.ErrNotFound
+	}
+	a.Title = title
+	a.Content = content
+	return a, nil
+}
+
+func (m *mockAssetRepo) Delete(_ context.Context, assetID string) error {
+	delete(m.assets, assetID)
+	return nil
+}
+
+func (m *mockAssetRepo) GetACLEntry(_ context.Context, assetID, userID string) (*asset.AssetACL, error) {
+	return m.acls[assetID+":"+userID], nil
+}
+
+func (m *mockAssetRepo) UpsertACLEntry(_ context.Context, assetID, userID, accessLevel string) error {
+	m.upsertCalls = append(m.upsertCalls, upsertCall{assetID, userID, accessLevel})
+	m.acls[assetID+":"+userID] = &asset.AssetACL{AssetID: assetID, UserID: userID, AccessLevel: accessLevel}
+	return nil
+}
+
+func (m *mockAssetRepo) DeleteACLEntry(_ context.Context, assetID, userID string) error {
+	delete(m.acls, assetID+":"+userID)
+	return nil
+}
+
+func (m *mockAssetRepo) GetDescendantIDs(_ context.Context, assetID string) ([]string, error) {
+	return m.descendants[assetID], nil
+}
+
+func (m *mockAssetRepo) IsManagerOfOwner(_ context.Context, callerID, ownerID string) (bool, error) {
+	return m.managers[callerID+":"+ownerID], nil
+}
+
+func (m *mockAssetRepo) UserExists(_ context.Context, userID string) (bool, error) {
+	return m.users[userID], nil
+}
