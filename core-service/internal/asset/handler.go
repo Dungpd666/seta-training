@@ -21,7 +21,7 @@ func NewHandler(svc Service) *Handler {
 func (h *Handler) Create(c *gin.Context) {
 	var body struct {
 		ParentID *string `json:"parent_id"`
-		Type     string  `json:"type" binding:"required"`
+		Type     string  `json:"type" binding:"required,oneof=folder note"`
 		Title    string  `json:"title" binding:"required"`
 		Content  *string `json:"content"`
 	}
