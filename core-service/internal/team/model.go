@@ -1,5 +1,17 @@
 package team
 
+import "errors"
+
+var (
+	ErrNotTeamManager      = errors.New("user is not a team manager")
+	ErrNotTeamCreator      = errors.New("user is not the team creator")
+	ErrCannotDemoteCreator = errors.New("cannot demote team creator")
+	ErrTeamNotFound        = errors.New("team not found")
+	ErrUserNotFound        = errors.New("user not found")
+	ErrNotTeamMember       = errors.New("user is not a team member")
+	ErrAlreadyMember       = errors.New("user already a member")
+)
+
 const (
 	RoleManager = "manager"
 	RoleMember  = "member"

@@ -7,16 +7,6 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-var (
-	ErrNotTeamManager      = errors.New("user is not a team manager")
-	ErrNotTeamCreator      = errors.New("user is not the team creator")
-	ErrCannotDemoteCreator = errors.New("cannot demote team creator")
-	ErrTeamNotFound        = errors.New("team not found")
-	ErrUserNotFound        = errors.New("user not found")
-	ErrNotTeamMember       = errors.New("user is not a team member")
-	ErrAlreadyMember       = errors.New("user already a member")
-)
-
 type Service interface {
 	CreateTeam(ctx context.Context, createdBy, teamName string) (*Team, error)
 	AddMember(ctx context.Context, teamID, callerID, targetUserID string) error
