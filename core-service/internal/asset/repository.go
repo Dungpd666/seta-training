@@ -128,8 +128,8 @@ func (r *repo) GetDescendantIDs(ctx context.Context, assetID string) ([]string, 
 
 func (r *repo) IsManagerOfOwner(ctx context.Context, callerID, ownerID string) (bool, error) {
 	return r.q.IsManagerOfMember(ctx, db.IsManagerOfMemberParams{
-		UserID:   callerID,
-		UserID_2: ownerID,
+		ManagerID: callerID,
+		MemberID:  ownerID,
 	})
 }
 
