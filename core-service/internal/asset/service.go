@@ -116,6 +116,9 @@ func (s *service) Share(ctx context.Context, callerID, assetID, targetUserID, ac
 	if err != nil {
 		return err
 	}
+	if asset.OwnerID != callerID {
+		return ErrForbidden
+	}
 	if err := s.requireWriteAccess(ctx, asset, callerID); err != nil {
 		return err
 	}
@@ -147,6 +150,9 @@ func (s *service) RevokeShare(ctx context.Context, callerID, assetID, targetUser
 	asset, err := s.repo.GetByID(ctx, assetID)
 	if err != nil {
 		return err
+	}
+	if asset.OwnerID != callerID {
+		return ErrForbidden
 	}
 	if err := s.requireWriteAccess(ctx, asset, callerID); err != nil {
 		return err
