@@ -19,7 +19,7 @@ type service struct {
 	repo TeamRepository
 }
 
-func NewTeamService(repo TeamRepository) Service {
+func NewService(repo TeamRepository) Service {
 	return &service{repo: repo}
 }
 

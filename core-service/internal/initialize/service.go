@@ -17,15 +17,15 @@ func initServices(ctx context.Context, cfg *config.Config, dbPool *pgxpool.Pool,
 
 	projectionRepo := team.NewProjectionRepository(q)
 	StartUserEventConsumer(ctx, cfg.KafkaBrokers, projectionRepo)
-	teamRepo := team.NewTeamRepository(q)
-	teamSvc := team.NewTeamService(teamRepo)
-	teamHandler := team.NewTeamHandler(teamSvc)
+	teamRepo := team.NewRepository(q)
+	teamSvc := team.NewService(teamRepo)
+	teamHandler := team.NewHandler(teamSvc)
 
 	assetRepo := asset.NewRepository(q)
 	assetSvc := asset.NewService(assetRepo)
 	assetHandler := asset.NewHandler(assetSvc)
 
-	jwks := middleware.NewJWKSClient(cfg.JWKSUrl)
+	jwks := middleware.NewJWKSClient(cfg.JWKSUrl, cfg.JWTIssuer, cfg.JWTAudience)
 
 	return teamHandler, assetHandler, jwks
 }

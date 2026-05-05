@@ -32,7 +32,7 @@ func NewProjectionRepository(q *db.Queries) ProjectionRepository {
 	return &projectionRepo{q: q}
 }
 
-func NewTeamRepository(q *db.Queries) TeamRepository {
+func NewRepository(q *db.Queries) TeamRepository {
 	return &teamRepo{q: q}
 }
 
