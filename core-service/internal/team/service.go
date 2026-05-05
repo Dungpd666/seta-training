@@ -14,6 +14,7 @@ var (
 	ErrTeamNotFound        = errors.New("team not found")
 	ErrUserNotFound        = errors.New("user not found")
 	ErrNotTeamMember       = errors.New("user is not a team member")
+	ErrAlreadyMember       = errors.New("user already a member")
 )
 
 type Service interface {
@@ -45,6 +46,11 @@ func (s *service) CreateTeam(ctx context.Context, createdBy, teamName string) (*
 
 func (s *service) AddMember(ctx context.Context, teamID, callerID, targetUserID string) error {
 	if err := s.requireTeamManager(ctx, teamID, callerID); err != nil {
+		return err
+	}
+	if _, err := s.repo.GetMemberRole(ctx, teamID, targetUserID); err == nil {
+		return ErrAlreadyMember
+	} else if !errors.Is(err, pgx.ErrNoRows) {
 		return err
 	}
 	if _, err := s.repo.GetUserByID(ctx, targetUserID); errors.Is(err, pgx.ErrNoRows) {
@@ -95,6 +101,11 @@ func (s *service) DemoteFromManager(ctx context.Context, teamID, callerID, targe
 }
 
 func (s *service) requireTeamManager(ctx context.Context, teamID, callerID string) error {
+	if _, err := s.repo.GetByID(ctx, teamID); errors.Is(err, pgx.ErrNoRows) {
+		return ErrTeamNotFound
+	} else if err != nil {
+		return err
+	}
 	role, err := s.repo.GetMemberRole(ctx, teamID, callerID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrNotTeamManager
