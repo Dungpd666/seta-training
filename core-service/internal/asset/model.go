@@ -13,10 +13,14 @@ const (
 )
 
 var (
-	ErrNotFound          = errors.New("asset not found")
-	ErrForbidden         = errors.New("forbidden: insufficient permissions")
-	ErrInvalidType       = errors.New("invalid asset type")
-	ErrTargetUserNotFound = errors.New("target user not found")
+	ErrNotFound                = errors.New("asset not found")
+	ErrForbidden               = errors.New("forbidden: insufficient permissions")
+	ErrInvalidType             = errors.New("invalid asset type")
+	ErrTargetUserNotFound      = errors.New("target user not found")
+	ErrParentNotFound          = errors.New("parent asset not found")
+	ErrParentNotFolder         = errors.New("parent asset is not a folder")
+	ErrNoteRequiresParent      = errors.New("note asset requires a parent folder")
+	ErrFolderContentNotAllowed = errors.New("folder asset cannot have content")
 )
 
 type AssetACL struct {

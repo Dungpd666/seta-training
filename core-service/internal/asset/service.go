@@ -1,6 +1,9 @@
 package asset
 
-import "context"
+import (
+	"context"
+	"errors"
+)
 
 type Service interface {
 	Create(ctx context.Context, callerID string, parentID *string, assetType, title string, content *string) (*Asset, error)
@@ -22,6 +25,27 @@ func NewService(repo Repository) Service {
 func (s *service) Create(ctx context.Context, callerID string, parentID *string, assetType, title string, content *string) (*Asset, error) {
 	if assetType != AssetTypeNote && assetType != AssetTypeFolder {
 		return nil, ErrInvalidType
+	}
+	if assetType == AssetTypeNote && parentID == nil {
+		return nil, ErrNoteRequiresParent
+	}
+	if assetType == AssetTypeFolder && content != nil {
+		return nil, ErrFolderContentNotAllowed
+	}
+	if parentID != nil {
+		parent, err := s.repo.GetByID(ctx, *parentID)
+		if errors.Is(err, ErrNotFound) {
+			return nil, ErrParentNotFound
+		}
+		if err != nil {
+			return nil, err
+		}
+		if parent.Type != AssetTypeFolder {
+			return nil, ErrParentNotFolder
+		}
+		if err := s.requireWriteAccess(ctx, parent, callerID); err != nil {
+			return nil, err
+		}
 	}
 	return s.repo.Create(ctx, callerID, parentID, assetType, title, content)
 }
