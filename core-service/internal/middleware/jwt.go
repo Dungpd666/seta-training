@@ -21,9 +21,6 @@ import (
 const (
 	CtxUserID = "user_id"
 	CtxRole   = "role"
-
-	issuer   = "auth-service"
-	audience = "seta"
 )
 
 type Claims struct {
@@ -32,13 +29,15 @@ type Claims struct {
 }
 
 type JWKSClient struct {
-	url  string
-	mu   sync.RWMutex
-	keys map[string]*rsa.PublicKey
+	url      string
+	mu       sync.RWMutex
+	keys     map[string]*rsa.PublicKey
+	issuer   string
+	audience string
 }
 
-func NewJWKSClient(jwksURL string) *JWKSClient {
-	return &JWKSClient{url: jwksURL, keys: make(map[string]*rsa.PublicKey)}
+func NewJWKSClient(jwksURL, issuer, audience string) *JWKSClient {
+	return &JWKSClient{url: jwksURL, keys: make(map[string]*rsa.PublicKey), issuer: issuer, audience: audience}
 }
 
 func (c *JWKSClient) GetKey(kid string) (*rsa.PublicKey, error) {
@@ -136,8 +135,8 @@ func JWTAuth(jwks *JWKSClient, rdb *redis.Client) gin.HandlerFunc {
 				}
 				return pubKey, nil
 			},
-			jwt.WithIssuer(issuer),
-			jwt.WithAudience(audience),
+			jwt.WithIssuer(jwks.issuer),
+			jwt.WithAudience(jwks.audience),
 			jwt.WithExpirationRequired(),
 		)
 		if err != nil {

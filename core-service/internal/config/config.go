@@ -13,6 +13,8 @@ type Config struct {
 	RedisURL       string
 	KafkaBrokers   []string
 	JWKSUrl        string
+	JWTIssuer      string
+	JWTAudience    string
 }
 
 func Load() (*Config, error) {
@@ -28,6 +30,8 @@ func Load() (*Config, error) {
 		RedisURL:       getenv("REDIS_URL", "redis://localhost:6379/0"),
 		KafkaBrokers:   strings.Split(getenv("KAFKA_BROKERS", "localhost:9092"), ","),
 		JWKSUrl:        getenv("JWKS_URL", "http://localhost:8081/.well-known/jwks.json"),
+		JWTIssuer:      getenv("JWT_ISSUER", "auth-service"),
+		JWTAudience:    getenv("JWT_AUDIENCE", "seta"),
 	}, nil
 }
 
