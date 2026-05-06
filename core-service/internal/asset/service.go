@@ -119,9 +119,6 @@ func (s *service) Share(ctx context.Context, callerID, assetID, targetUserID, ac
 	if asset.OwnerID != callerID {
 		return ErrForbidden
 	}
-	if err := s.requireWriteAccess(ctx, asset, callerID); err != nil {
-		return err
-	}
 	exists, err := s.repo.UserExists(ctx, targetUserID)
 	if err != nil {
 		return err
@@ -129,21 +126,9 @@ func (s *service) Share(ctx context.Context, callerID, assetID, targetUserID, ac
 	if !exists {
 		return ErrTargetUserNotFound
 	}
-	if err := s.repo.UpsertACLEntry(ctx, assetID, targetUserID, accessLevel); err != nil {
-		return err
-	}
-	if asset.Type == AssetTypeFolder {
-		descendants, err := s.repo.GetDescendantIDs(ctx, assetID)
-		if err != nil {
-			return err
-		}
-		for _, childID := range descendants {
-			if err := s.repo.UpsertACLEntry(ctx, childID, targetUserID, accessLevel); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
+	return s.applyACLCascade(ctx, assetID, asset.Type, func(id string) error {
+		return s.repo.UpsertACLEntry(ctx, id, targetUserID, accessLevel)
+	})
 }
 
 func (s *service) RevokeShare(ctx context.Context, callerID, assetID, targetUserID string) error {
@@ -154,21 +139,25 @@ func (s *service) RevokeShare(ctx context.Context, callerID, assetID, targetUser
 	if asset.OwnerID != callerID {
 		return ErrForbidden
 	}
-	if err := s.requireWriteAccess(ctx, asset, callerID); err != nil {
+	return s.applyACLCascade(ctx, assetID, asset.Type, func(id string) error {
+		return s.repo.DeleteACLEntry(ctx, id, targetUserID)
+	})
+}
+
+func (s *service) applyACLCascade(ctx context.Context, assetID, assetType string, apply func(string) error) error {
+	if err := apply(assetID); err != nil {
 		return err
 	}
-	if err := s.repo.DeleteACLEntry(ctx, assetID, targetUserID); err != nil {
+	if assetType != AssetTypeFolder {
+		return nil
+	}
+	descendants, err := s.repo.GetDescendantIDs(ctx, assetID)
+	if err != nil {
 		return err
 	}
-	if asset.Type == AssetTypeFolder {
-		descendants, err := s.repo.GetDescendantIDs(ctx, assetID)
-		if err != nil {
+	for _, id := range descendants {
+		if err := apply(id); err != nil {
 			return err
-		}
-		for _, childID := range descendants {
-			if err := s.repo.DeleteACLEntry(ctx, childID, targetUserID); err != nil {
-				return err
-			}
 		}
 	}
 	return nil

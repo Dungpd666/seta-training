@@ -90,10 +90,16 @@ func (s *service) DemoteFromManager(ctx context.Context, teamID, callerID, targe
 	return s.repo.AddMember(ctx, teamID, targetUserID, RoleMember)
 }
 
+func (s *service) mustGetTeam(ctx context.Context, teamID string) (*Team, error) {
+	team, err := s.repo.GetByID(ctx, teamID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrTeamNotFound
+	}
+	return team, err
+}
+
 func (s *service) requireTeamManager(ctx context.Context, teamID, callerID string) error {
-	if _, err := s.repo.GetByID(ctx, teamID); errors.Is(err, pgx.ErrNoRows) {
-		return ErrTeamNotFound
-	} else if err != nil {
+	if _, err := s.mustGetTeam(ctx, teamID); err != nil {
 		return err
 	}
 	role, err := s.repo.GetMemberRole(ctx, teamID, callerID)
@@ -110,10 +116,7 @@ func (s *service) requireTeamManager(ctx context.Context, teamID, callerID strin
 }
 
 func (s *service) requireTeamCreator(ctx context.Context, teamID, callerID string) error {
-	team, err := s.repo.GetByID(ctx, teamID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return ErrTeamNotFound
-	}
+	team, err := s.mustGetTeam(ctx, teamID)
 	if err != nil {
 		return err
 	}
