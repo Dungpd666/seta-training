@@ -10,7 +10,7 @@ import (
 
 type KafkaProducer struct {
 	brokers []string
-	mu      sync.Mutex
+	mu      sync.RWMutex
 	writers map[string]*kafka.Writer
 }
 
@@ -27,18 +27,25 @@ func (p *KafkaProducer) Publish(ctx context.Context, topic string, payload any) 
 		return err
 	}
 
-	p.mu.Lock()
+	p.mu.RLock()
 	w, ok := p.writers[topic]
-	if !ok {
-		w = kafka.NewWriter(kafka.WriterConfig{
-			Brokers:  p.brokers,
-			Topic:    topic,
-			Balancer: &kafka.LeastBytes{},
-		})
-		p.writers[topic] = w
-	}
-	p.mu.Unlock()
+	p.mu.RUnlock()
 
+	if !ok {
+		p.mu.Lock()
+		if w, ok = p.writers[topic]; !ok {
+			w = kafka.NewWriter(kafka.WriterConfig{
+				Brokers:  p.brokers,
+				Topic:    topic,
+				Balancer: &kafka.LeastBytes{},
+			})
+			p.writers[topic] = w
+		}
+		p.mu.Unlock()
+	}
+
+	p.mu.RLock()
+	defer p.mu.RUnlock()
 	return w.WriteMessages(ctx, kafka.Message{Value: data})
 }
 
