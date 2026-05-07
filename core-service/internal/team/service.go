@@ -7,15 +7,6 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-var (
-	ErrNotTeamManager      = errors.New("user is not a team manager")
-	ErrNotTeamCreator      = errors.New("user is not the team creator")
-	ErrCannotDemoteCreator = errors.New("cannot demote team creator")
-	ErrTeamNotFound        = errors.New("team not found")
-	ErrUserNotFound        = errors.New("user not found")
-	ErrNotTeamMember       = errors.New("user is not a team member")
-)
-
 type Service interface {
 	CreateTeam(ctx context.Context, createdBy, teamName string) (*Team, error)
 	AddMember(ctx context.Context, teamID, callerID, targetUserID string) error
@@ -28,7 +19,7 @@ type service struct {
 	repo TeamRepository
 }
 
-func NewTeamService(repo TeamRepository) Service {
+func NewService(repo TeamRepository) Service {
 	return &service{repo: repo}
 }
 
@@ -45,6 +36,11 @@ func (s *service) CreateTeam(ctx context.Context, createdBy, teamName string) (*
 
 func (s *service) AddMember(ctx context.Context, teamID, callerID, targetUserID string) error {
 	if err := s.requireTeamManager(ctx, teamID, callerID); err != nil {
+		return err
+	}
+	if _, err := s.repo.GetMemberRole(ctx, teamID, targetUserID); err == nil {
+		return ErrAlreadyMember
+	} else if !errors.Is(err, pgx.ErrNoRows) {
 		return err
 	}
 	if _, err := s.repo.GetUserByID(ctx, targetUserID); errors.Is(err, pgx.ErrNoRows) {
@@ -89,12 +85,23 @@ func (s *service) DemoteFromManager(ctx context.Context, teamID, callerID, targe
 		return err
 	}
 	if role != RoleManager {
-		return ErrNotTeamMember
+		return ErrNotTeamManager
 	}
 	return s.repo.AddMember(ctx, teamID, targetUserID, RoleMember)
 }
 
+func (s *service) mustGetTeam(ctx context.Context, teamID string) (*Team, error) {
+	team, err := s.repo.GetByID(ctx, teamID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrTeamNotFound
+	}
+	return team, err
+}
+
 func (s *service) requireTeamManager(ctx context.Context, teamID, callerID string) error {
+	if _, err := s.mustGetTeam(ctx, teamID); err != nil {
+		return err
+	}
 	role, err := s.repo.GetMemberRole(ctx, teamID, callerID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrNotTeamManager
@@ -109,10 +116,7 @@ func (s *service) requireTeamManager(ctx context.Context, teamID, callerID strin
 }
 
 func (s *service) requireTeamCreator(ctx context.Context, teamID, callerID string) error {
-	team, err := s.repo.GetByID(ctx, teamID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return ErrTeamNotFound
-	}
+	team, err := s.mustGetTeam(ctx, teamID)
 	if err != nil {
 		return err
 	}

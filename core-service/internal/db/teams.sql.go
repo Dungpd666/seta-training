@@ -86,6 +86,7 @@ func (q *Queries) GetTeamByID(ctx context.Context, teamID string) (Team, error) 
 
 const getUserProjectionByID = `-- name: GetUserProjectionByID :one
 SELECT user_id, username, email, role, deleted_at, updated_at FROM users_projection WHERE user_id = $1
+AND deleted_at IS NULL
 `
 
 func (q *Queries) GetUserProjectionByID(ctx context.Context, userID string) (UsersProjection, error) {
@@ -115,12 +116,12 @@ SELECT EXISTS (
 `
 
 type IsManagerOfMemberParams struct {
-	UserID   string
-	UserID_2 string
+	ManagerID string
+	MemberID  string
 }
 
 func (q *Queries) IsManagerOfMember(ctx context.Context, arg IsManagerOfMemberParams) (bool, error) {
-	row := q.db.QueryRow(ctx, isManagerOfMember, arg.UserID, arg.UserID_2)
+	row := q.db.QueryRow(ctx, isManagerOfMember, arg.ManagerID, arg.MemberID)
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err

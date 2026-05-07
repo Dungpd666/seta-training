@@ -7,14 +7,32 @@ import (
 	"github.com/dungpd/seta/core-service/internal/middleware"
 	"github.com/dungpd/seta/core-service/internal/response"
 	"github.com/gin-gonic/gin"
+	"github.com/rs/zerolog/log"
 )
 
 type Handler struct {
 	svc Service
 }
 
-func NewTeamHandler(svc Service) *Handler {
+func NewHandler(svc Service) *Handler {
 	return &Handler{svc: svc}
+}
+
+func writeTeamErr(c *gin.Context, err error) bool {
+	switch {
+	case errors.Is(err, ErrNotTeamManager) || errors.Is(err, ErrNotTeamCreator) || errors.Is(err, ErrCannotDemoteCreator):
+		response.Error(c, http.StatusForbidden, response.ErrForbidden, err.Error())
+	case errors.Is(err, ErrTeamNotFound):
+		response.Error(c, http.StatusNotFound, response.ErrNotFound, err.Error())
+	case errors.Is(err, ErrUserNotFound) || errors.Is(err, ErrNotTeamMember) || errors.Is(err, ErrAlreadyMember):
+		response.Error(c, http.StatusUnprocessableEntity, response.ErrUnprocessable, err.Error())
+	case err != nil:
+		log.Error().Err(err).Msg("internal error")
+		response.Error(c, http.StatusInternalServerError, response.ErrInternal, "internal server error")
+	default:
+		return false
+	}
+	return true
 }
 
 func (h *Handler) CreateTeam(c *gin.Context) {
@@ -38,11 +56,9 @@ func (h *Handler) CreateTeam(c *gin.Context) {
 		return
 	}
 	team, err := h.svc.CreateTeam(c.Request.Context(), callerID, body.TeamName)
-	if err != nil {
-		response.Error(c, http.StatusInternalServerError, response.ErrInternal, err.Error())
+	if writeTeamErr(c, err) {
 		return
 	}
-
 	response.SuccessWithStatus(c, http.StatusCreated, team)
 }
 
@@ -63,20 +79,7 @@ func (h *Handler) AddMember(c *gin.Context) {
 	}
 
 	err := h.svc.AddMember(c.Request.Context(), teamID, callerID, body.UserID)
-	if errors.Is(err, ErrNotTeamManager) {
-		response.Error(c, http.StatusForbidden, response.ErrForbidden, err.Error())
-		return
-	}
-	if errors.Is(err, ErrTeamNotFound) {
-		response.Error(c, http.StatusNotFound, response.ErrNotFound, err.Error())
-		return
-	}
-	if errors.Is(err, ErrUserNotFound) {
-		response.Error(c, http.StatusUnprocessableEntity, response.ErrBadRequest, err.Error())
-		return
-	}
-	if err != nil {
-		response.Error(c, http.StatusInternalServerError, response.ErrInternal, err.Error())
+	if writeTeamErr(c, err) {
 		return
 	}
 	c.Status(http.StatusNoContent)
@@ -92,16 +95,7 @@ func (h *Handler) RemoveMember(c *gin.Context) {
 	}
 
 	err := h.svc.RemoveMember(c.Request.Context(), teamID, callerID, targetUserID)
-	if errors.Is(err, ErrNotTeamManager) {
-		response.Error(c, http.StatusForbidden, response.ErrForbidden, err.Error())
-		return
-	}
-	if errors.Is(err, ErrTeamNotFound) {
-		response.Error(c, http.StatusNotFound, response.ErrNotFound, err.Error())
-		return
-	}
-	if err != nil {
-		response.Error(c, http.StatusInternalServerError, response.ErrInternal, err.Error())
+	if writeTeamErr(c, err) {
 		return
 	}
 	c.Status(http.StatusNoContent)
@@ -124,20 +118,7 @@ func (h *Handler) AddManager(c *gin.Context) {
 	}
 
 	err := h.svc.PromoteToManager(c.Request.Context(), teamID, callerID, body.UserID)
-	if errors.Is(err, ErrNotTeamCreator) {
-		response.Error(c, http.StatusForbidden, response.ErrForbidden, err.Error())
-		return
-	}
-	if errors.Is(err, ErrTeamNotFound) {
-		response.Error(c, http.StatusNotFound, response.ErrNotFound, err.Error())
-		return
-	}
-	if errors.Is(err, ErrUserNotFound) {
-		response.Error(c, http.StatusUnprocessableEntity, response.ErrBadRequest, err.Error())
-		return
-	}
-	if err != nil {
-		response.Error(c, http.StatusInternalServerError, response.ErrInternal, err.Error())
+	if writeTeamErr(c, err) {
 		return
 	}
 	c.Status(http.StatusNoContent)
@@ -153,20 +134,7 @@ func (h *Handler) RemoveManager(c *gin.Context) {
 	}
 
 	err := h.svc.DemoteFromManager(c.Request.Context(), teamID, callerID, targetUserID)
-	if errors.Is(err, ErrNotTeamCreator) || errors.Is(err, ErrCannotDemoteCreator) {
-		response.Error(c, http.StatusForbidden, response.ErrForbidden, err.Error())
-		return
-	}
-	if errors.Is(err, ErrTeamNotFound) {
-		response.Error(c, http.StatusNotFound, response.ErrNotFound, err.Error())
-		return
-	}
-	if errors.Is(err, ErrNotTeamMember) {
-		response.Error(c, http.StatusUnprocessableEntity, response.ErrBadRequest, err.Error())
-		return
-	}
-	if err != nil {
-		response.Error(c, http.StatusInternalServerError, response.ErrInternal, err.Error())
+	if writeTeamErr(c, err) {
 		return
 	}
 	c.Status(http.StatusNoContent)

@@ -7,6 +7,7 @@ import (
 	"github.com/dungpd/seta/core-service/internal/middleware"
 	"github.com/dungpd/seta/core-service/internal/response"
 	"github.com/gin-gonic/gin"
+	"github.com/rs/zerolog/log"
 )
 
 type Handler struct {
@@ -17,6 +18,24 @@ func NewHandler(svc Service) *Handler {
 	return &Handler{svc: svc}
 }
 
+func writeAssetErr(c *gin.Context, err error) bool {
+	switch {
+	case errors.Is(err, ErrNotFound) || errors.Is(err, ErrParentNotFound):
+		response.Error(c, http.StatusNotFound, response.ErrNotFound, err.Error())
+	case errors.Is(err, ErrForbidden):
+		response.Error(c, http.StatusForbidden, response.ErrForbidden, err.Error())
+	case errors.Is(err, ErrInvalidType) || errors.Is(err, ErrNoteRequiresParent) ||
+		errors.Is(err, ErrParentNotFolder) || errors.Is(err, ErrFolderContentNotAllowed) ||
+		errors.Is(err, ErrTargetUserNotFound):
+		response.Error(c, http.StatusUnprocessableEntity, response.ErrUnprocessable, err.Error())
+	case err != nil:
+		log.Error().Err(err).Msg("internal error")
+		response.Error(c, http.StatusInternalServerError, response.ErrInternal, "internal server error")
+	default:
+		return false
+	}
+	return true
+}
 
 func (h *Handler) Create(c *gin.Context) {
 	var body struct {
@@ -37,12 +56,7 @@ func (h *Handler) Create(c *gin.Context) {
 		return
 	}
 	asset, err := h.svc.Create(c.Request.Context(), callerID, body.ParentID, body.Type, body.Title, body.Content)
-	if errors.Is(err, ErrInvalidType) {
-		response.Error(c, http.StatusBadRequest, response.ErrBadRequest, err.Error())
-		return
-	}
-	if err != nil {
-		response.Error(c, http.StatusInternalServerError, response.ErrInternal, err.Error())
+	if writeAssetErr(c, err) {
 		return
 	}
 	response.SuccessWithStatus(c, http.StatusCreated, asset)
@@ -56,16 +70,7 @@ func (h *Handler) GetByID(c *gin.Context) {
 		return
 	}
 	asset, err := h.svc.GetByID(c.Request.Context(), callerID, assetID)
-	if errors.Is(err, ErrNotFound) {
-		response.Error(c, http.StatusNotFound, response.ErrNotFound, err.Error())
-		return
-	}
-	if errors.Is(err, ErrForbidden) {
-		response.Error(c, http.StatusForbidden, response.ErrForbidden, err.Error())
-		return
-	}
-	if err != nil {
-		response.Error(c, http.StatusInternalServerError, response.ErrInternal, err.Error())
+	if writeAssetErr(c, err) {
 		return
 	}
 	response.Success(c, asset)
@@ -88,16 +93,7 @@ func (h *Handler) Update(c *gin.Context) {
 		return
 	}
 	asset, err := h.svc.Update(c.Request.Context(), callerID, assetID, body.Title, body.Content)
-	if errors.Is(err, ErrNotFound) {
-		response.Error(c, http.StatusNotFound, response.ErrNotFound, err.Error())
-		return
-	}
-	if errors.Is(err, ErrForbidden) {
-		response.Error(c, http.StatusForbidden, response.ErrForbidden, err.Error())
-		return
-	}
-	if err != nil {
-		response.Error(c, http.StatusInternalServerError, response.ErrInternal, err.Error())
+	if writeAssetErr(c, err) {
 		return
 	}
 	response.Success(c, asset)
@@ -112,16 +108,7 @@ func (h *Handler) Delete(c *gin.Context) {
 	}
 
 	err := h.svc.Delete(c.Request.Context(), callerID, assetID)
-	if errors.Is(err, ErrNotFound) {
-		response.Error(c, http.StatusNotFound, response.ErrNotFound, err.Error())
-		return
-	}
-	if errors.Is(err, ErrForbidden) {
-		response.Error(c, http.StatusForbidden, response.ErrForbidden, err.Error())
-		return
-	}
-	if err != nil {
-		response.Error(c, http.StatusInternalServerError, response.ErrInternal, err.Error())
+	if writeAssetErr(c, err) {
 		return
 	}
 	c.Status(http.StatusNoContent)
@@ -145,20 +132,7 @@ func (h *Handler) Share(c *gin.Context) {
 	}
 
 	err := h.svc.Share(c.Request.Context(), callerID, assetID, body.UserID, body.AccessLevel)
-	if errors.Is(err, ErrNotFound) {
-		response.Error(c, http.StatusNotFound, response.ErrNotFound, err.Error())
-		return
-	}
-	if errors.Is(err, ErrForbidden) {
-		response.Error(c, http.StatusForbidden, response.ErrForbidden, err.Error())
-		return
-	}
-	if errors.Is(err, ErrTargetUserNotFound) {
-		response.Error(c, http.StatusUnprocessableEntity, response.ErrBadRequest, err.Error())
-		return
-	}
-	if err != nil {
-		response.Error(c, http.StatusInternalServerError, response.ErrInternal, err.Error())
+	if writeAssetErr(c, err) {
 		return
 	}
 	c.Status(http.StatusNoContent)
@@ -174,16 +148,7 @@ func (h *Handler) RevokeShare(c *gin.Context) {
 	}
 
 	err := h.svc.RevokeShare(c.Request.Context(), callerID, assetID, targetUserID)
-	if errors.Is(err, ErrNotFound) {
-		response.Error(c, http.StatusNotFound, response.ErrNotFound, err.Error())
-		return
-	}
-	if errors.Is(err, ErrForbidden) {
-		response.Error(c, http.StatusForbidden, response.ErrForbidden, err.Error())
-		return
-	}
-	if err != nil {
-		response.Error(c, http.StatusInternalServerError, response.ErrInternal, err.Error())
+	if writeAssetErr(c, err) {
 		return
 	}
 	c.Status(http.StatusNoContent)

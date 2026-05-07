@@ -1,6 +1,9 @@
 package asset
 
-import "context"
+import (
+	"context"
+	"errors"
+)
 
 type Service interface {
 	Create(ctx context.Context, callerID string, parentID *string, assetType, title string, content *string) (*Asset, error)
@@ -22,6 +25,27 @@ func NewService(repo Repository) Service {
 func (s *service) Create(ctx context.Context, callerID string, parentID *string, assetType, title string, content *string) (*Asset, error) {
 	if assetType != AssetTypeNote && assetType != AssetTypeFolder {
 		return nil, ErrInvalidType
+	}
+	if assetType == AssetTypeNote && parentID == nil {
+		return nil, ErrNoteRequiresParent
+	}
+	if assetType == AssetTypeFolder && content != nil {
+		return nil, ErrFolderContentNotAllowed
+	}
+	if parentID != nil {
+		parent, err := s.repo.GetByID(ctx, *parentID)
+		if errors.Is(err, ErrNotFound) {
+			return nil, ErrParentNotFound
+		}
+		if err != nil {
+			return nil, err
+		}
+		if parent.Type != AssetTypeFolder {
+			return nil, ErrParentNotFolder
+		}
+		if err := s.requireWriteAccess(ctx, parent, callerID); err != nil {
+			return nil, err
+		}
 	}
 	return s.repo.Create(ctx, callerID, parentID, assetType, title, content)
 }
@@ -92,8 +116,8 @@ func (s *service) Share(ctx context.Context, callerID, assetID, targetUserID, ac
 	if err != nil {
 		return err
 	}
-	if err := s.requireWriteAccess(ctx, asset, callerID); err != nil {
-		return err
+	if asset.OwnerID != callerID {
+		return ErrForbidden
 	}
 	exists, err := s.repo.UserExists(ctx, targetUserID)
 	if err != nil {
@@ -102,21 +126,9 @@ func (s *service) Share(ctx context.Context, callerID, assetID, targetUserID, ac
 	if !exists {
 		return ErrTargetUserNotFound
 	}
-	if err := s.repo.UpsertACLEntry(ctx, assetID, targetUserID, accessLevel); err != nil {
-		return err
-	}
-	if asset.Type == AssetTypeFolder {
-		descendants, err := s.repo.GetDescendantIDs(ctx, assetID)
-		if err != nil {
-			return err
-		}
-		for _, childID := range descendants {
-			if err := s.repo.UpsertACLEntry(ctx, childID, targetUserID, accessLevel); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
+	return s.applyACLCascade(ctx, assetID, asset.Type, func(id string) error {
+		return s.repo.UpsertACLEntry(ctx, id, targetUserID, accessLevel)
+	})
 }
 
 func (s *service) RevokeShare(ctx context.Context, callerID, assetID, targetUserID string) error {
@@ -124,21 +136,28 @@ func (s *service) RevokeShare(ctx context.Context, callerID, assetID, targetUser
 	if err != nil {
 		return err
 	}
-	if err := s.requireWriteAccess(ctx, asset, callerID); err != nil {
+	if asset.OwnerID != callerID {
+		return ErrForbidden
+	}
+	return s.applyACLCascade(ctx, assetID, asset.Type, func(id string) error {
+		return s.repo.DeleteACLEntry(ctx, id, targetUserID)
+	})
+}
+
+func (s *service) applyACLCascade(ctx context.Context, assetID, assetType string, apply func(string) error) error {
+	if err := apply(assetID); err != nil {
 		return err
 	}
-	if err := s.repo.DeleteACLEntry(ctx, assetID, targetUserID); err != nil {
+	if assetType != AssetTypeFolder {
+		return nil
+	}
+	descendants, err := s.repo.GetDescendantIDs(ctx, assetID)
+	if err != nil {
 		return err
 	}
-	if asset.Type == AssetTypeFolder {
-		descendants, err := s.repo.GetDescendantIDs(ctx, assetID)
-		if err != nil {
+	for _, id := range descendants {
+		if err := apply(id); err != nil {
 			return err
-		}
-		for _, childID := range descendants {
-			if err := s.repo.DeleteACLEntry(ctx, childID, targetUserID); err != nil {
-				return err
-			}
 		}
 	}
 	return nil
