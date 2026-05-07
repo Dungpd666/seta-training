@@ -119,11 +119,7 @@ func (r *repo) DeleteACLEntry(ctx context.Context, assetID, userID string) error
 }
 
 func (r *repo) GetDescendantIDs(ctx context.Context, assetID string) ([]string, error) {
-	var pgParentID pgtype.Text
-	if err := pgParentID.Scan(assetID); err != nil {
-		return nil, err
-	}
-	return r.q.GetDescendantIDs(ctx, pgParentID)
+	return r.q.GetDescendantIDs(ctx, pgtype.Text{String: assetID, Valid: true})
 }
 
 func (r *repo) IsManagerOfOwner(ctx context.Context, callerID, ownerID string) (bool, error) {

@@ -9,11 +9,16 @@ import (
 	kafka "github.com/segmentio/kafka-go"
 )
 
+const (
+	topicUserEvents    = "user.events"
+	groupUserProjection = "core-user-projection"
+)
+
 func StartUserEventConsumer(ctx context.Context, brokers []string, repo team.ProjectionRepository) {
 	r := kafka.NewReader(kafka.ReaderConfig{
 		Brokers:     brokers,
-		Topic:       "user.events",
-		GroupID:     "core-user-projection",
+		Topic:       topicUserEvents,
+		GroupID:     groupUserProjection,
 		StartOffset: kafka.FirstOffset,
 	})
 

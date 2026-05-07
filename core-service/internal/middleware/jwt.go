@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"context"
 	"crypto/rsa"
 	"encoding/base64"
 	"encoding/json"
@@ -112,28 +111,14 @@ func JWTAuth(jwks *JWKSClient, rdb *redis.Client) gin.HandlerFunc {
 		}
 		tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
 
-		unverified, _, err := jwt.NewParser().ParseUnverified(tokenStr, &Claims{})
-		if err != nil {
-			c.Abort()
-			response.Error(c, http.StatusUnauthorized, response.ErrUnauthorized, "malformed token")
-			return
-		}
-		kid, _ := unverified.Header["kid"].(string)
-
-		pubKey, err := jwks.GetKey(kid)
-		if err != nil {
-			c.Abort()
-			response.Error(c, http.StatusUnauthorized, response.ErrUnauthorized, "unknown signing key")
-			return
-		}
-
 		claims := &Claims{}
-		_, err = jwt.ParseWithClaims(tokenStr, claims,
+		_, err := jwt.ParseWithClaims(tokenStr, claims,
 			func(t *jwt.Token) (any, error) {
 				if _, ok := t.Method.(*jwt.SigningMethodRSA); !ok {
 					return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
 				}
-				return pubKey, nil
+				kid, _ := t.Header["kid"].(string)
+				return jwks.GetKey(kid)
 			},
 			jwt.WithIssuer(jwks.issuer),
 			jwt.WithAudience(jwks.audience),
@@ -145,7 +130,7 @@ func JWTAuth(jwks *JWKSClient, rdb *redis.Client) gin.HandlerFunc {
 			return
 		}
 
-		blacklisted, err := rdb.Exists(context.Background(), "jwt:blacklist:"+claims.ID).Result()
+		blacklisted, err := rdb.Exists(c.Request.Context(), "jwt:blacklist:"+claims.ID).Result()
 		if err != nil {
 			log.Error().Err(err).Msg("redis blacklist check failed")
 		} else if blacklisted > 0 {

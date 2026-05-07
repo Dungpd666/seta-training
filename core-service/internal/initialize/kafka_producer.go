@@ -44,8 +44,6 @@ func (p *KafkaProducer) Publish(ctx context.Context, topic string, payload any) 
 		p.mu.Unlock()
 	}
 
-	p.mu.RLock()
-	defer p.mu.RUnlock()
 	return w.WriteMessages(ctx, kafka.Message{Value: data})
 }
 
