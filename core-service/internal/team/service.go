@@ -85,7 +85,7 @@ func (s *service) DemoteFromManager(ctx context.Context, teamID, callerID, targe
 		return err
 	}
 	if role != RoleManager {
-		return ErrNotTeamMember
+		return ErrNotTeamManager
 	}
 	return s.repo.AddMember(ctx, teamID, targetUserID, RoleMember)
 }
