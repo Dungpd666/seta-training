@@ -1,14 +1,31 @@
 package user
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
 	"github.com/dungpd/seta/auth-service/internal/response"
 	"github.com/gin-gonic/gin"
+	"github.com/rs/zerolog/log"
 )
 
 const maxImportFileSize = 10 << 20 // 10MB
+
+func WriteUserErr(c *gin.Context, err error) bool {
+	switch {
+	case errors.Is(err, ErrEmailInUse):
+		response.Error(c, http.StatusConflict, response.ErrConflict, err.Error())
+	case errors.Is(err, ErrInvalidCredentials):
+		response.Error(c, http.StatusUnauthorized, response.ErrUnauthorized, err.Error())
+	case err != nil:
+		log.Error().Err(err).Msg("internal error")
+		response.Error(c, http.StatusInternalServerError, response.ErrInternal, "internal server error")
+	default:
+		return false
+	}
+	return true
+}
 
 type Handler struct {
 	svc Service
@@ -20,8 +37,7 @@ func NewHandler(svc Service) *Handler {
 
 func (h *Handler) ListUsers(c *gin.Context) {
 	users, err := h.svc.ListAll(c.Request.Context())
-	if err != nil {
-		response.Error(c, http.StatusInternalServerError, response.ErrInternal, "failed to list users")
+	if WriteUserErr(c, err) {
 		return
 	}
 
