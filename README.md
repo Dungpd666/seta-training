@@ -1,33 +1,71 @@
-# 🔥 Microservices Challenge: User, Team & Asset Management
+# seta-training
 
-## 🎯 Project Intention & Introduction
-Welcome to the Capstone Mini-Project for the 2026 Golang Intern Course! 
+Two Go microservices for the 2026 Golang Intern Course capstone.
 
-The goal of this project is to evaluate your system design, coding, and problem-solving skills in building a robust backend system. Unlike standard tutorials, **this project is technology-agnostic.** While the core language is Go (to align with the course), you have the absolute freedom to choose your preferred API protocols (REST, GraphQL, gRPC), databases (SQL vs. NoSQL), frameworks, and infrastructure tools. 
+## Prerequisites
 
-You are expected to research your choices, justify your trade-offs, and implement best practices for a microservices architecture. The project will be released in **3 progressive stages**, allowing you to continuously build, iterate, and scale the system alongside the course syllabus.
+- Docker & Docker Compose
+- Go 1.25+
+- OpenSSL (for RSA key generation)
 
-> 💡 *"Every technical decision should be a deliberate trade-off, balancing the pragmatism of today with the scale of tomorrow."*
+## Quick Start
 
-## 👩🏻‍💻 System Overview
-You are tasked with building a microservices-based system to manage users, teams, and digital assets. 
-* **Users** can have varying roles (Manager or Member).
-* **Managers** can form teams and manage personnel.
-* **All Users** can manage, organize, and share digital assets (folders & notes) with granular access control.
+**1. Start infrastructure**
 
-## 📋 General Requirements
+```bash
+docker-compose up -d
+```
 
-### 1. General Engineering Standards
-* **Authentication & Authorization:** Secure all endpoints and validate user roles before executing sensitive actions.
-* **Clean Architecture:** Structure your code utilizing separation of concerns (e.g., handlers, services, repositories).
-* **Error Handling:** Ensure graceful degradation and use appropriate HTTP/RPC status codes.
+Starts: PostgreSQL ×2 (ports 5480, 5433), Redis (6379), Kafka + Zookeeper (9092).
 
-### 2. Technical Documentation
-* You must prepare a **500–800 word document** describing the tech stack used in your project.
-* Detail why you chose your specific database, message queue, or API protocol. What were the trade-offs, and how do they benefit your specific implementation?
+**2. Generate RSA keys** (auth-service only, one-time)
 
-### 3. Final Presentation (Demo & Future Pitch)
-* You will participate in a live **3-minute presentation**.
-* Pitch **one major future improvement** for your system. If this were a real startup, what is the next technical bottleneck you would hit, and how would you re-architect the system to solve it?
+```bash
+cd auth-service
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out jwt_rs256.pem
+openssl rsa -in jwt_rs256.pem -pubout -out jwt_rs256.pub
+```
 
-*(Note: The detailed technical specifications for the project are divided into Stage 1, Stage 2, and Stage 3 documents. All submissions must be in English).*
+**3. Configure environment**
+
+```bash
+# auth-service/.env
+DB_URL=postgres://postgres:postgres@localhost:5480/authdb
+
+# core-service/.env
+DB_URL=postgres://postgres:postgres@localhost:5433/coredb
+```
+
+**4. Run services** (each in a separate terminal)
+
+```bash
+cd auth-service && go run ./cmd/main.go   # :8081
+cd core-service && go run ./cmd/main.go   # :8082
+```
+
+Migrations run automatically on startup — no manual step needed.
+
+## Run Tests
+
+```bash
+# All tests
+go test ./...
+
+# Single test with verbose output
+go test ./internal/team/... -run TestCreateTeam_CreatorAutoAddedAsManager -v
+```
+
+## Services
+
+| Service | Port | Responsibility |
+|---|---|---|
+| auth-service | 8081 | Registration, login, JWT issuance, user listing, CSV import |
+| core-service | 8082 | Teams, assets (folders & notes), sharing, RBAC |
+
+## Documentation
+
+| File | Purpose |
+|---|---|
+| `docs/GOAL.md` | Project requirements and grading criteria |
+| `docs/tech-stack.md` | Tech stack choices and trade-offs |
+| `docs/ARCHITECTURE.md` | System architecture overview |
