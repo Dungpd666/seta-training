@@ -3,6 +3,7 @@ package auth
 import (
 	"encoding/base64"
 	"encoding/binary"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -14,8 +15,11 @@ import (
 
 func writeAuthErr(c *gin.Context, err error) bool {
 	switch {
-	case err != nil:
+	case errors.Is(err, ErrInvalidToken) || errors.Is(err, ErrTokenRevoked):
 		response.Error(c, http.StatusUnauthorized, response.ErrUnauthorized, err.Error())
+	case err != nil:
+		log.Error().Err(err).Msg("internal error")
+		response.Error(c, http.StatusInternalServerError, response.ErrInternal, "internal server error")
 	default:
 		return false
 	}
@@ -114,7 +118,12 @@ func (h *Handler) Logout(c *gin.Context) {
 		return
 	}
 	if err := h.authSvc.RevokeSession(c.Request.Context(), strings.TrimPrefix(authHeader, "Bearer "), req.RefreshToken); err != nil {
-		response.Error(c, http.StatusUnauthorized, response.ErrUnauthorized, err.Error())
+		if errors.Is(err, ErrInvalidToken) {
+			response.Error(c, http.StatusUnauthorized, response.ErrUnauthorized, err.Error())
+		} else {
+			log.Error().Err(err).Msg("internal error")
+			response.Error(c, http.StatusInternalServerError, response.ErrInternal, "internal server error")
+		}
 		return
 	}
 	c.Status(http.StatusNoContent)

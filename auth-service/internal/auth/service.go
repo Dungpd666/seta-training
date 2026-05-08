@@ -116,20 +116,20 @@ func (s *service) GenerateTokenPair(ctx context.Context, userID, role string) (a
 func (s *service) RotateRefreshToken(ctx context.Context, tokenStr string) (accessToken, refreshToken string, err error) {
 	claims, err := s.ParseToken(tokenStr, jwt.WithExpirationRequired())
 	if err != nil || claims.Type != refreshTokenType {
-		return "", "", fmt.Errorf("invalid refresh token")
+		return "", "", ErrInvalidToken
 	}
 
 	valid, err := s.refreshRepo.IsValid(ctx, claims.ID)
 	if err != nil {
-		return "", "", err
+		return "", "", fmt.Errorf("check token validity: %w", err)
 	}
 	if !valid {
 		_ = s.refreshRepo.RevokeAllForUser(ctx, claims.Subject)
-		return "", "", fmt.Errorf("refresh token reuse detected")
+		return "", "", ErrTokenRevoked
 	}
 
 	if err := s.refreshRepo.MarkRevoked(ctx, claims.ID); err != nil {
-		return "", "", fmt.Errorf("failed to revoke token: %w", err)
+		return "", "", fmt.Errorf("revoke old token: %w", err)
 	}
 
 	return s.GenerateTokenPair(ctx, claims.Subject, claims.Role)
@@ -138,20 +138,22 @@ func (s *service) RotateRefreshToken(ctx context.Context, tokenStr string) (acce
 func (s *service) RevokeSession(ctx context.Context, accessTokenStr, refreshTokenStr string) error {
 	accessClaims, err := s.ParseToken(accessTokenStr, jwt.WithExpirationRequired())
 	if err != nil {
-		return fmt.Errorf("invalid access token: %w", err)
+		return ErrInvalidToken
 	}
 
 	refreshClaims, err := s.ParseToken(refreshTokenStr)
 	if err != nil {
-		return fmt.Errorf("invalid refresh token: %w", err)
+		return ErrInvalidToken
 	}
 
 	if err := s.refreshRepo.MarkRevoked(ctx, refreshClaims.ID); err != nil {
-		return fmt.Errorf("failed to revoke refresh token: %w", err)
+		return fmt.Errorf("revoke refresh token: %w", err)
 	}
 
 	if ttl := time.Until(accessClaims.ExpiresAt.Time); ttl > 0 {
-		return s.redis.Set(ctx, blacklistKey(accessClaims.ID), "1", ttl).Err()
+		if err := s.redis.Set(ctx, blacklistKey(accessClaims.ID), "1", ttl).Err(); err != nil {
+			return fmt.Errorf("blacklist access token: %w", err)
+		}
 	}
 	return nil
 }
