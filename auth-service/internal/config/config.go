@@ -17,6 +17,8 @@ type Config struct {
 	PrivateKey     *rsa.PrivateKey
 	PublicKey      *rsa.PublicKey
 	ImportWorkers  int
+	JWTIssuer      string
+	JWTAudience    string
 }
 
 func Load() (*Config, error) {
@@ -43,6 +45,8 @@ func Load() (*Config, error) {
 		PrivateKey:     privateKey,
 		PublicKey:      publicKey,
 		ImportWorkers:  getenvInt("IMPORT_WORKERS", 5),
+		JWTIssuer:      getenv("JWT_ISSUER", "auth-service"),
+		JWTAudience:    getenv("JWT_AUDIENCE", "seta"),
 	}, nil
 }
 

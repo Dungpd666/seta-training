@@ -11,5 +11,7 @@ func SuccessWithStatus(c *gin.Context, status int, data any) {
 }
 
 func Error(c *gin.Context, status int, code, msg string) {
-	c.JSON(status, gin.H{"error": msg, "code": code})
+	reqID, _ := c.Get("request_id")
+	reqIDStr, _ := reqID.(string)
+	c.JSON(status, gin.H{"error": msg, "code": code, "request_id": reqIDStr})
 }

@@ -19,6 +19,6 @@ func initServices(
 		userRepo,
 		user.WithWorkers(cfg.ImportWorkers),
 	)
-	authSvc := auth.NewService(refreshRepo, cfg.PrivateKey, cfg.PublicKey, rdb)
+	authSvc := auth.NewService(refreshRepo, cfg.PrivateKey, cfg.PublicKey, rdb, cfg.JWTIssuer, cfg.JWTAudience)
 	return auth.NewHandler(userSvc, authSvc), user.NewHandler(userSvc), authSvc
 }

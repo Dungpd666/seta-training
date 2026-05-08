@@ -12,10 +12,9 @@ import (
 )
 
 const (
-	Issuer          = "auth-service"
-	Audience        = "seta"
-	AccessTokenTTL  = 15 * time.Minute
-	refreshTokenTTL = 7 * 24 * time.Hour
+	AccessTokenTTL   = 15 * time.Minute
+	refreshTokenTTL  = 7 * 24 * time.Hour
+	refreshTokenType = "refresh"
 )
 
 type Claims struct {
@@ -45,6 +44,8 @@ type service struct {
 	privateKey  *rsa.PrivateKey
 	publicKey   *rsa.PublicKey
 	redis       *redis.Client
+	issuer      string
+	audience    string
 }
 
 func NewService(
@@ -52,12 +53,15 @@ func NewService(
 	privateKey *rsa.PrivateKey,
 	publicKey *rsa.PublicKey,
 	rdb *redis.Client,
+	issuer, audience string,
 ) Service {
 	return &service{
 		refreshRepo: refreshRepo,
 		privateKey:  privateKey,
 		publicKey:   publicKey,
 		redis:       rdb,
+		issuer:      issuer,
+		audience:    audience,
 	}
 }
 
@@ -75,8 +79,8 @@ func (s *service) GenerateTokenPair(ctx context.Context, userID, role string) (a
 			ID:        uuid.NewString(),
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(AccessTokenTTL)),
-			Issuer:    Issuer,
-			Audience:  jwt.ClaimStrings{Audience},
+			Issuer:    s.issuer,
+			Audience:  jwt.ClaimStrings{s.audience},
 		},
 	}
 	accessToken, err = jwt.NewWithClaims(jwt.SigningMethodRS256, accessClaims).SignedString(s.privateKey)
@@ -86,14 +90,14 @@ func (s *service) GenerateTokenPair(ctx context.Context, userID, role string) (a
 
 	refreshJTI := uuid.NewString()
 	refreshClaims := Claims{
-		Type: "refresh",
+		Type: refreshTokenType,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   userID,
 			ID:        refreshJTI,
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(refreshTokenTTL)),
-			Issuer:    Issuer,
-			Audience:  jwt.ClaimStrings{Audience},
+			Issuer:    s.issuer,
+			Audience:  jwt.ClaimStrings{s.audience},
 		},
 	}
 	refreshToken, err = jwt.NewWithClaims(jwt.SigningMethodRS256, refreshClaims).SignedString(s.privateKey)
@@ -110,12 +114,8 @@ func (s *service) GenerateTokenPair(ctx context.Context, userID, role string) (a
 }
 
 func (s *service) RotateRefreshToken(ctx context.Context, tokenStr string) (accessToken, refreshToken string, err error) {
-	claims, err := s.ParseToken(tokenStr,
-		jwt.WithIssuer(Issuer),
-		jwt.WithAudience(Audience),
-		jwt.WithExpirationRequired(),
-	)
-	if err != nil || claims.Type != "refresh" {
+	claims, err := s.ParseToken(tokenStr, jwt.WithExpirationRequired())
+	if err != nil || claims.Type != refreshTokenType {
 		return "", "", fmt.Errorf("invalid refresh token")
 	}
 
@@ -136,11 +136,7 @@ func (s *service) RotateRefreshToken(ctx context.Context, tokenStr string) (acce
 }
 
 func (s *service) RevokeSession(ctx context.Context, accessTokenStr, refreshTokenStr string) error {
-	accessClaims, err := s.ParseToken(accessTokenStr,
-		jwt.WithIssuer(Issuer),
-		jwt.WithAudience(Audience),
-		jwt.WithExpirationRequired(),
-	)
+	accessClaims, err := s.ParseToken(accessTokenStr, jwt.WithExpirationRequired())
 	if err != nil {
 		return fmt.Errorf("invalid access token: %w", err)
 	}
@@ -161,8 +157,11 @@ func (s *service) RevokeSession(ctx context.Context, accessTokenStr, refreshToke
 }
 
 func (s *service) ParseToken(tokenStr string, opts ...jwt.ParserOption) (*Claims, error) {
+	parseopts := make([]jwt.ParserOption, 0, 2+len(opts))
+	parseopts = append(parseopts, jwt.WithIssuer(s.issuer), jwt.WithAudience(s.audience))
+	parseopts = append(parseopts, opts...)
 	claims := &Claims{}
-	_, err := jwt.ParseWithClaims(tokenStr, claims, s.keyFunc(), opts...)
+	_, err := jwt.ParseWithClaims(tokenStr, claims, s.keyFunc(), parseopts...)
 	if err != nil {
 		return nil, err
 	}

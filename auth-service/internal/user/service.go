@@ -3,7 +3,6 @@ package user
 import (
 	"context"
 	"encoding/csv"
-	"errors"
 	"fmt"
 	"io"
 	"sort"
@@ -11,11 +10,6 @@ import (
 	"sync"
 
 	"golang.org/x/crypto/bcrypt"
-)
-
-var (
-	ErrEmailInUse         = errors.New("email already in use")
-	ErrInvalidCredentials = errors.New("invalid credentials")
 )
 
 var expectedHeader = []string{"username", "email", "password", "role"}

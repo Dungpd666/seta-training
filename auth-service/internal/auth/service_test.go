@@ -32,7 +32,7 @@ func newAuthSvc(t *testing.T) (auth.Service, *mockRefreshRepo) {
 	mr := miniredis.RunT(t)
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	repo := newMockRefreshRepo()
-	return auth.NewService(repo, testPrivKey, testPubKey, rdb), repo
+	return auth.NewService(repo, testPrivKey, testPubKey, rdb, "auth-service", "seta"), repo
 }
 
 func TestGenerateTokenPair_ClaimsCorrect(t *testing.T) {
