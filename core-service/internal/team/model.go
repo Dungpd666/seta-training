@@ -60,6 +60,18 @@ type TeamEvent struct {
 	UserID string `json:"user_id,omitempty"`
 }
 
+type CreateTeamRequest struct {
+	TeamName string `json:"team_name" binding:"required"`
+}
+
+type AddMemberRequest struct {
+	UserID string `json:"user_id" binding:"required"`
+}
+
+type AddManagerRequest struct {
+	UserID string `json:"user_id" binding:"required"`
+}
+
 type Publisher interface {
 	Publish(ctx context.Context, topic string, payload any) error
 }

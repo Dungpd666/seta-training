@@ -56,6 +56,23 @@ type AssetEvent struct {
 	Timestamp time.Time `json:"timestamp"`
 }
 
+type CreateAssetRequest struct {
+	ParentID *string `json:"parent_id"`
+	Type     string  `json:"type"  binding:"required,oneof=folder note"`
+	Title    string  `json:"title" binding:"required"`
+	Content  *string `json:"content"`
+}
+
+type UpdateAssetRequest struct {
+	Title   string  `json:"title"   binding:"required"`
+	Content *string `json:"content"`
+}
+
+type ShareAssetRequest struct {
+	UserID      string `json:"user_id" binding:"required"`
+	AccessLevel string `json:"access"  binding:"required,oneof=read write"`
+}
+
 type Publisher interface {
 	Publish(ctx context.Context, topic string, payload any) error
 }

@@ -38,13 +38,7 @@ func writeAssetErr(c *gin.Context, err error) bool {
 }
 
 func (h *Handler) Create(c *gin.Context) {
-	var body struct {
-		ParentID *string `json:"parent_id"`
-		Type     string  `json:"type" binding:"required,oneof=folder note"`
-		Title    string  `json:"title" binding:"required"`
-		Content  *string `json:"content"`
-	}
-
+	var body CreateAssetRequest
 	if err := c.ShouldBindJSON(&body); err != nil {
 		response.Error(c, http.StatusBadRequest, response.ErrBadRequest, err.Error())
 		return
@@ -78,10 +72,7 @@ func (h *Handler) GetByID(c *gin.Context) {
 
 func (h *Handler) Update(c *gin.Context) {
 	assetID := c.Param("id")
-	var body struct {
-		Title   string  `json:"title" binding:"required"`
-		Content *string `json:"content"`
-	}
+	var body UpdateAssetRequest
 	if err := c.ShouldBindJSON(&body); err != nil {
 		response.Error(c, http.StatusBadRequest, response.ErrBadRequest, err.Error())
 		return
@@ -122,10 +113,7 @@ func (h *Handler) Share(c *gin.Context) {
 		return
 	}
 
-	var body struct {
-		UserID      string `json:"user_id" binding:"required"`
-		AccessLevel string `json:"access" binding:"required,oneof=read write"`
-	}
+	var body ShareAssetRequest
 	if err := c.ShouldBindJSON(&body); err != nil {
 		response.Error(c, http.StatusBadRequest, response.ErrBadRequest, err.Error())
 		return
