@@ -2,10 +2,13 @@ package initialize
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/dungpd/seta/core-service/internal/config"
 	"github.com/dungpd/seta/core-service/internal/router"
@@ -47,6 +50,21 @@ func Run() error {
 	teamHandler, assetHandler, jwks := initServices(ctx, cfg, dbPool, rdb)
 
 	r := router.New(jwks, rdb, teamHandler, assetHandler)
-	log.Info().Str("port", cfg.Port).Msg("starting core-service")
-	return r.Run(":" + cfg.Port)
+	srv := &http.Server{
+		Addr:    ":" + cfg.Port,
+		Handler: r,
+	}
+
+	go func() {
+		log.Info().Str("port", cfg.Port).Msg("starting core-service")
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatal().Err(err).Msg("server error")
+		}
+	}()
+
+	<-ctx.Done()
+	log.Info().Msg("shutting down server")
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer shutdownCancel()
+	return srv.Shutdown(shutdownCtx)
 }

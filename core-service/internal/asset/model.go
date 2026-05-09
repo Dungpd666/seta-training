@@ -1,6 +1,7 @@
 package asset
 
 import (
+	"context"
 	"errors"
 	"time"
 )
@@ -23,6 +24,15 @@ var (
 	ErrFolderContentNotAllowed = errors.New("folder asset cannot have content")
 )
 
+const TopicAssetChanges = "asset.changes"
+
+const (
+	EventNoteCreated   = "NOTE_CREATED"
+	EventNoteUpdated   = "NOTE_UPDATED"
+	EventFolderDeleted = "FOLDER_DELETED"
+	EventFolderShared  = "FOLDER_SHARED"
+)
+
 type AssetACL struct {
 	AssetID     string `json:"asset_id"`
 	UserID      string `json:"user_id"`
@@ -37,4 +47,15 @@ type Asset struct {
 	Title     string    `json:"title"`
 	Content   *string   `json:"content,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
+}
+
+type AssetEvent struct {
+	Event     string    `json:"event"`
+	AssetID   string    `json:"asset_id"`
+	OwnerID   string    `json:"owner_id"`
+	Timestamp time.Time `json:"timestamp"`
+}
+
+type Publisher interface {
+	Publish(ctx context.Context, topic string, payload any) error
 }
