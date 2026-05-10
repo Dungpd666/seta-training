@@ -10,6 +10,29 @@ var (
 	ErrInvalidCredentials = errors.New("invalid credentials")
 )
 
+const (
+	TopicUserEvents = "user.events"
+
+	EventUserCreated   = "USER_CREATED"
+	EventUserUpdated   = "USER_UPDATED"
+	EventUserDeleted   = "USER_DELETED"
+	EventUsersImported = "USERS_IMPORTED"
+)
+
+type UserEvent struct {
+	Type     string `json:"type"`
+	UserID   string `json:"user_id"`
+	UserName string `json:"user_name"`
+	Email    string `json:"email"`
+	Role     string `json:"role"`
+}
+
+type UsersImportedEvent struct {
+	Type      string `json:"type"`
+	Succeeded int    `json:"succeeded"`
+	Failed    int    `json:"failed"`
+}
+
 type User struct {
 	UserID       string
 	Username     string
