@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 )
 
 type Config struct {
@@ -14,6 +15,7 @@ type Config struct {
 	Port           string
 	MigrationsPath string
 	RedisURL       string
+	KafkaBrokers   []string
 	PrivateKey     *rsa.PrivateKey
 	PublicKey      *rsa.PublicKey
 	ImportWorkers  int
@@ -42,6 +44,7 @@ func Load() (*Config, error) {
 		Port:           getenv("PORT", "8081"),
 		MigrationsPath: getenv("MIGRATIONS_PATH", "migrations"),
 		RedisURL:       getenv("REDIS_URL", "redis://localhost:6379/0"),
+		KafkaBrokers:   getenvSlice("KAFKA_BROKERS", "localhost:9092"),
 		PrivateKey:     privateKey,
 		PublicKey:      publicKey,
 		ImportWorkers:  getenvInt("IMPORT_WORKERS", 5),
@@ -63,6 +66,18 @@ func getenv(key, defaultVal string) string {
 		return v
 	}
 	return defaultVal
+}
+
+func getenvSlice(key, defaultVal string) []string {
+	v := os.Getenv(key)
+	if v == "" {
+		v = defaultVal
+	}
+	parts := strings.Split(v, ",")
+	for i, p := range parts {
+		parts[i] = strings.TrimSpace(p)
+	}
+	return parts
 }
 
 func getenvInt(key string, defaultVal int) int {

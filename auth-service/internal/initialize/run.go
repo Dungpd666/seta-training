@@ -30,7 +30,10 @@ func Run() error {
 	}
 	log.Info().Msg("connected to redis")
 
-	authHandler, userHandler, authSvc := initServices(cfg, dbPool, rdb)
+	producer := NewKafkaProducer(cfg.KafkaBrokers)
+	defer producer.Close()
+
+	authHandler, userHandler, authSvc := initServices(cfg, dbPool, rdb, producer)
 	r := router.New(dbPool, authHandler, userHandler, authSvc)
 
 	log.Info().Str("port", cfg.Port).Msg("starting auth-service")

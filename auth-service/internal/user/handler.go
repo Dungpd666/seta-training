@@ -41,14 +41,14 @@ func (h *Handler) ListUsers(c *gin.Context) {
 		return
 	}
 
-	result := make([]gin.H, len(users))
+	result := make([]UserResponse, len(users))
 	for i, u := range users {
-		result[i] = gin.H{
-			"user_id":    u.UserID,
-			"username":   u.Username,
-			"email":      u.Email,
-			"role":       u.Role,
-			"created_at": u.CreatedAt,
+		result[i] = UserResponse{
+			UserID:    u.UserID,
+			Username:  u.Username,
+			Email:     u.Email,
+			Role:      u.Role,
+			CreatedAt: u.CreatedAt,
 		}
 	}
 	response.Success(c, result)

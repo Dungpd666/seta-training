@@ -9,10 +9,15 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/rs/zerolog/log"
 	"golang.org/x/crypto/bcrypt"
 )
 
 var expectedHeader = []string{"username", "email", "password", "role"}
+
+type EventPublisher interface {
+	Publish(ctx context.Context, topic string, payload any) error
+}
 
 type Repository interface {
 	Create(ctx context.Context, u *User) error
@@ -54,6 +59,7 @@ type rowResult struct {
 type service struct {
 	repo           Repository
 	defaultWorkers int
+	publisher      EventPublisher
 }
 
 type Option func(*service)
@@ -67,6 +73,21 @@ func NewService(repo Repository, opts ...Option) Service {
 		opt(s)
 	}
 	return s
+}
+
+func WithPublisher(p EventPublisher) Option {
+	return func(s *service) {
+		s.publisher = p
+	}
+}
+
+func (s *service) publish(topic string, event any) {
+	if s.publisher == nil {
+		return
+	}
+	if err := s.publisher.Publish(context.Background(), topic, event); err != nil {
+		log.Error().Err(err).Str("topic", topic).Msg("event publish failed")
+	}
 }
 
 func (s *service) ListAll(ctx context.Context) ([]User, error) {
@@ -96,6 +117,15 @@ func (s *service) Register(ctx context.Context, username, email, password, role 
 	if err := s.repo.Create(ctx, u); err != nil {
 		return nil, err
 	}
+
+	s.publish(TopicUserEvents, UserEvent{
+		Type:     EventUserCreated,
+		UserID:   u.UserID,
+		UserName: u.Username,
+		Email:    u.Email,
+		Role:     u.Role,
+	})
+
 	return u, nil
 }
 
@@ -160,6 +190,12 @@ func (s *service) ImportFromCSV(ctx context.Context, r io.Reader, workers int) (
 
 	sort.Slice(result.Errors, func(i, j int) bool {
 		return result.Errors[i].Row < result.Errors[j].Row
+	})
+
+	s.publish(TopicUserEvents, UsersImportedEvent{
+		Type:      EventUsersImported,
+		Succeeded: result.Succeeded,
+		Failed:    result.Failed,
 	})
 
 	return result, nil
