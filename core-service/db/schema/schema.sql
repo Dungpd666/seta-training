@@ -42,3 +42,10 @@
     PRIMARY KEY (asset_id, user_id)
 );
 
+CREATE TABLE audit_log (
+    event_id    TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    event_type  TEXT NOT NULL,
+    payload     JSONB NOT NULL,
+    received_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+

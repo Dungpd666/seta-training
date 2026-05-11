@@ -3,6 +3,9 @@ package asset
 import (
 	"context"
 	"errors"
+	"time"
+
+	"github.com/rs/zerolog/log"
 )
 
 type Service interface {
@@ -15,11 +18,12 @@ type Service interface {
 }
 
 type service struct {
-	repo Repository
+	repo      Repository
+	publisher Publisher
 }
 
-func NewService(repo Repository) Service {
-	return &service{repo: repo}
+func NewService(repo Repository, publisher Publisher) Service {
+	return &service{repo: repo, publisher: publisher}
 }
 
 func (s *service) Create(ctx context.Context, callerID string, parentID *string, assetType, title string, content *string) (*Asset, error) {
@@ -47,7 +51,14 @@ func (s *service) Create(ctx context.Context, callerID string, parentID *string,
 			return nil, err
 		}
 	}
-	return s.repo.Create(ctx, callerID, parentID, assetType, title, content)
+	created, err := s.repo.Create(ctx, callerID, parentID, assetType, title, content)
+	if err != nil {
+		return nil, err
+	}
+	if assetType == AssetTypeNote {
+		s.publishEvent(ctx, EventNoteCreated, created.AssetID, created.OwnerID)
+	}
+	return created, nil
 }
 
 func (s *service) GetByID(ctx context.Context, callerID, assetID string) (*Asset, error) {
@@ -83,7 +94,14 @@ func (s *service) Update(ctx context.Context, callerID, assetID, title string, c
 	if err := s.requireWriteAccess(ctx, existing, callerID); err != nil {
 		return nil, err
 	}
-	return s.repo.Update(ctx, assetID, title, content)
+	updated, err := s.repo.Update(ctx, assetID, title, content)
+	if err != nil {
+		return nil, err
+	}
+	if existing.Type == AssetTypeNote {
+		s.publishEvent(ctx, EventNoteUpdated, assetID, existing.OwnerID)
+	}
+	return updated, nil
 }
 
 func (s *service) Delete(ctx context.Context, callerID, assetID string) error {
@@ -94,7 +112,13 @@ func (s *service) Delete(ctx context.Context, callerID, assetID string) error {
 	if existing.OwnerID != callerID {
 		return ErrForbidden
 	}
-	return s.repo.Delete(ctx, assetID)
+	if err := s.repo.Delete(ctx, assetID); err != nil {
+		return err
+	}
+	if existing.Type == AssetTypeFolder {
+		s.publishEvent(ctx, EventFolderDeleted, assetID, existing.OwnerID)
+	}
+	return nil
 }
 
 func (s *service) requireWriteAccess(ctx context.Context, asset *Asset, callerID string) error {
@@ -126,9 +150,15 @@ func (s *service) Share(ctx context.Context, callerID, assetID, targetUserID, ac
 	if !exists {
 		return ErrTargetUserNotFound
 	}
-	return s.applyACLCascade(ctx, assetID, asset.Type, func(id string) error {
+	if err := s.applyACLCascade(ctx, assetID, asset.Type, func(id string) error {
 		return s.repo.UpsertACLEntry(ctx, id, targetUserID, accessLevel)
-	})
+	}); err != nil {
+		return err
+	}
+	if asset.Type == AssetTypeFolder {
+		s.publishEvent(ctx, EventFolderShared, assetID, asset.OwnerID)
+	}
+	return nil
 }
 
 func (s *service) RevokeShare(ctx context.Context, callerID, assetID, targetUserID string) error {
@@ -142,6 +172,17 @@ func (s *service) RevokeShare(ctx context.Context, callerID, assetID, targetUser
 	return s.applyACLCascade(ctx, assetID, asset.Type, func(id string) error {
 		return s.repo.DeleteACLEntry(ctx, id, targetUserID)
 	})
+}
+
+func (s *service) publishEvent(ctx context.Context, eventType, assetID, ownerID string) {
+	if err := s.publisher.Publish(ctx, TopicAssetChanges, AssetEvent{
+		Event:     eventType,
+		AssetID:   assetID,
+		OwnerID:   ownerID,
+		Timestamp: time.Now(),
+	}); err != nil {
+		log.Warn().Err(err).Str("event", eventType).Msg("failed to publish asset event")
+	}
 }
 
 func (s *service) applyACLCascade(ctx context.Context, assetID, assetType string, apply func(string) error) error {

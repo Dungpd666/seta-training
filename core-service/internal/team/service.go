@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/rs/zerolog/log"
 )
 
 type Service interface {
@@ -16,11 +17,12 @@ type Service interface {
 }
 
 type service struct {
-	repo TeamRepository
+	repo      TeamRepository
+	publisher Publisher
 }
 
-func NewService(repo TeamRepository) Service {
-	return &service{repo: repo}
+func NewService(repo TeamRepository, publisher Publisher) Service {
+	return &service{repo: repo, publisher: publisher}
 }
 
 func (s *service) CreateTeam(ctx context.Context, createdBy, teamName string) (*Team, error) {
@@ -31,6 +33,7 @@ func (s *service) CreateTeam(ctx context.Context, createdBy, teamName string) (*
 	if err := s.repo.AddMember(ctx, team.TeamID, createdBy, RoleManager); err != nil {
 		return nil, err
 	}
+	s.publishEvent(ctx, EventTeamCreated, team.TeamID, createdBy)
 	return team, nil
 }
 
@@ -48,14 +51,22 @@ func (s *service) AddMember(ctx context.Context, teamID, callerID, targetUserID 
 	} else if err != nil {
 		return err
 	}
-	return s.repo.AddMember(ctx, teamID, targetUserID, RoleMember)
+	if err := s.repo.AddMember(ctx, teamID, targetUserID, RoleMember); err != nil {
+		return err
+	}
+	s.publishEvent(ctx, EventMemberAdded, teamID, targetUserID)
+	return nil
 }
 
 func (s *service) RemoveMember(ctx context.Context, teamID, callerID, targetUserID string) error {
 	if err := s.requireTeamManager(ctx, teamID, callerID); err != nil {
 		return err
 	}
-	return s.repo.RemoveMember(ctx, teamID, targetUserID)
+	if err := s.repo.RemoveMember(ctx, teamID, targetUserID); err != nil { 
+		return err
+	}
+	s.publishEvent(ctx, EventMemberRemoved, teamID, targetUserID)
+	return nil
 }
 
 func (s *service) PromoteToManager(ctx context.Context, teamID, callerID, targetUserID string) error {
@@ -67,7 +78,11 @@ func (s *service) PromoteToManager(ctx context.Context, teamID, callerID, target
 	} else if err != nil {
 		return err
 	}
-	return s.repo.AddMember(ctx, teamID, targetUserID, RoleManager)
+	if err := s.repo.AddMember(ctx, teamID, targetUserID, RoleManager); err != nil {
+		return err
+	}
+	s.publishEvent(ctx, EventManagerAdded, teamID, targetUserID)
+	return nil
 }
 
 func (s *service) DemoteFromManager(ctx context.Context, teamID, callerID, targetUserID string) error {
@@ -87,7 +102,21 @@ func (s *service) DemoteFromManager(ctx context.Context, teamID, callerID, targe
 	if role != RoleManager {
 		return ErrNotTeamManager
 	}
-	return s.repo.AddMember(ctx, teamID, targetUserID, RoleMember)
+	if err := s.repo.AddMember(ctx, teamID, targetUserID, RoleMember); err != nil {
+		return err
+	}
+	s.publishEvent(ctx, EventManagerRemoved, teamID, targetUserID)
+	return nil
+}
+
+func (s *service) publishEvent(ctx context.Context, event, teamID, userID string) {
+	if err := s.publisher.Publish(ctx, TopicTeamActivity, TeamEvent{
+		Event:  event,
+		TeamID: teamID,
+		UserID: userID,
+	}); err != nil {
+		log.Error().Err(err).Str("event", event).Str("team_id", teamID).Msg("failed to publish team event")
+	}
 }
 
 func (s *service) mustGetTeam(ctx context.Context, teamID string) (*Team, error) {

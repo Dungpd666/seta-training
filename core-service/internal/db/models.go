@@ -24,6 +24,13 @@ type AssetAcl struct {
 	AccessLevel string
 }
 
+type AuditLog struct {
+	EventID    string
+	EventType  string
+	Payload    []byte
+	ReceivedAt pgtype.Timestamptz
+}
+
 type Team struct {
 	TeamID    string
 	TeamName  string
