@@ -18,6 +18,7 @@ type TeamRepository interface {
 	GetMemberRole(ctx context.Context, teamID, userID string) (string, error)
 	GetByID(ctx context.Context, teamID string) (*Team, error)
 	GetUserByID(ctx context.Context, userID string) (*UserProjection, error)
+	ListMembers(ctx context.Context, teamID string) ([]*TeamMember, error)
 }
 
 type projectionRepo struct {
@@ -110,4 +111,22 @@ func (r *teamRepo) GetUserByID(ctx context.Context, userID string) (*UserProject
 		Email:    row.Email,
 		Role:     row.Role,
 	}, nil
+}
+
+func (r *teamRepo) ListMembers(ctx context.Context, teamID string) ([]*TeamMember, error) {
+	dbMembers, err := r.q.GetTeamMembers(ctx, teamID)
+	if err != nil {
+		return nil, err
+	}
+
+	members := make([]*TeamMember, len(dbMembers))
+	for i, m := range dbMembers {
+		members[i] = &TeamMember{
+			UserID:   m.UserID,
+			Role:     m.Role,
+			UserName: m.Username,
+			Email:    m.Email,
+		}
+	}
+	return members, nil
 }

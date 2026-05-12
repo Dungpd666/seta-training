@@ -75,3 +75,10 @@ type AddManagerRequest struct {
 type Publisher interface {
 	Publish(ctx context.Context, topic string, payload any) error
 }
+
+type TeamMember struct {
+	UserID   string `json:"user_id"`
+	Role     string `json:"role"`
+	UserName string `json:"username"`
+	Email    string `json:"email"`
+}
