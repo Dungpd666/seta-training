@@ -2,10 +2,15 @@ package asset_test
 
 import (
 	"context"
+	"strings"
 
 	"github.com/dungpd/seta/core-service/internal/asset"
 	"github.com/google/uuid"
 )
+
+type mockPublisher struct{}
+
+func (m *mockPublisher) Publish(_ context.Context, _ string, _ any) error { return nil }
 
 type upsertCall struct {
 	assetID, userID, accessLevel string
@@ -91,4 +96,15 @@ func (m *mockAssetRepo) IsManagerOfOwner(_ context.Context, callerID, ownerID st
 
 func (m *mockAssetRepo) UserExists(_ context.Context, userID string) (bool, error) {
 	return m.users[userID], nil
+}
+
+func (m *mockAssetRepo) ListACLByAsset(_ context.Context, assetID string) ([]*asset.AssetACL, error) {
+	prefix := assetID + ":"
+	var entries []*asset.AssetACL
+	for key, acl := range m.acls {
+		if strings.HasPrefix(key, prefix) {
+			entries = append(entries, acl)
+		}
+	}
+	return entries, nil
 }

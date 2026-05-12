@@ -5,12 +5,16 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/dungpd/seta/core-service/internal/team"
+	"github.com/redis/go-redis/v9"
 )
 
 func newSvc() (team.Service, *mockTeamRepo) {
 	repo := newMockTeamRepo()
-	return team.NewService(repo), repo
+	mr, _ := miniredis.Run()
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	return team.NewService(repo, rdb, &mockPublisher{}), repo
 }
 
 func TestCreateTeam_CreatorAutoAddedAsManager(t *testing.T) {
