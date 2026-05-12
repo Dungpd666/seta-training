@@ -94,6 +94,7 @@ func (s *service) PromoteToManager(ctx context.Context, teamID, callerID, target
 		return err
 	}
 	s.publishEvent(ctx, EventManagerAdded, teamID, targetUserID)
+	s.rdb.Del(ctx, cache.TeamMembersKey(teamID))
 	return nil
 }
 
@@ -118,6 +119,7 @@ func (s *service) DemoteFromManager(ctx context.Context, teamID, callerID, targe
 		return err
 	}
 	s.publishEvent(ctx, EventManagerRemoved, teamID, targetUserID)
+	s.rdb.Del(ctx, cache.TeamMembersKey(teamID))
 	return nil
 }
 
