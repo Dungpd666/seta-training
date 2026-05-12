@@ -2,9 +2,12 @@ package asset
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 
+	"github.com/dungpd/seta/core-service/internal/cache"
+	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog/log"
 )
 
@@ -20,10 +23,11 @@ type Service interface {
 type service struct {
 	repo      Repository
 	publisher Publisher
+	rdb       *redis.Client
 }
 
-func NewService(repo Repository, publisher Publisher) Service {
-	return &service{repo: repo, publisher: publisher}
+func NewService(repo Repository, rdb *redis.Client, publisher Publisher) Service {
+	return &service{repo: repo, publisher: publisher, rdb: rdb}
 }
 
 func (s *service) Create(ctx context.Context, callerID string, parentID *string, assetType, title string, content *string) (*Asset, error) {
@@ -62,20 +66,42 @@ func (s *service) Create(ctx context.Context, callerID string, parentID *string,
 }
 
 func (s *service) GetByID(ctx context.Context, callerID, assetID string) (*Asset, error) {
-	existing, err := s.repo.GetByID(ctx, assetID)
-	if err != nil {
-		return nil, err
+	assetCacheKey := cache.AssetKey(assetID)
+	cached, err := s.rdb.Get(ctx, assetCacheKey).Result()
+	var existing *Asset
+	if err == nil {
+		if jsonErr := json.Unmarshal([]byte(cached), &existing); jsonErr != nil {
+			log.Warn().Err(jsonErr).Str("asset_id", assetID).Msg("failed to unmarshal cached asset")
+			existing = nil
+		}
 	}
+
+	if existing == nil {
+		existing, err = s.repo.GetByID(ctx, assetID)
+		if err != nil {
+			return nil, err
+		}
+		if data, marshalErr := json.Marshal(existing); marshalErr != nil {
+			log.Warn().Err(marshalErr).Str("asset_id", assetID).Msg("failed to marshal asset for cache")
+		} else {
+			s.rdb.Set(ctx, assetCacheKey, data, 5*time.Minute)
+		}
+	}
+
 	if existing.OwnerID == callerID {
 		return existing, nil
 	}
-	acl, err := s.repo.GetACLEntry(ctx, assetID, callerID)
+
+	aclEntries, err := s.cachedACL(ctx, assetID)
 	if err != nil {
 		return nil, err
 	}
-	if acl != nil {
-		return existing, nil
+	for _, a := range aclEntries {
+		if a.UserID == callerID {
+			return existing, nil
+		}
 	}
+
 	isManager, err := s.repo.IsManagerOfOwner(ctx, callerID, existing.OwnerID)
 	if err != nil {
 		return nil, err
@@ -84,6 +110,26 @@ func (s *service) GetByID(ctx context.Context, callerID, assetID string) (*Asset
 		return existing, nil
 	}
 	return nil, ErrForbidden
+}
+
+func (s *service) cachedACL(ctx context.Context, assetID string) ([]*AssetACL, error) {
+	cacheKey := cache.AssetACLKey(assetID)
+	if cached, err := s.rdb.Get(ctx, cacheKey).Result(); err == nil {
+		var entries []*AssetACL
+		if err := json.Unmarshal([]byte(cached), &entries); err == nil {
+			return entries, nil
+		}
+	}
+	entries, err := s.repo.ListACLByAsset(ctx, assetID)
+	if err != nil {
+		return nil, err
+	}
+	if data, marshalErr := json.Marshal(entries); marshalErr != nil {
+		log.Warn().Err(marshalErr).Str("asset_id", assetID).Msg("failed to marshal ACL for cache")
+	} else {
+		s.rdb.Set(ctx, cacheKey, data, 5*time.Minute)
+	}
+	return entries, nil
 }
 
 func (s *service) Update(ctx context.Context, callerID, assetID, title string, content *string) (*Asset, error) {
@@ -101,6 +147,7 @@ func (s *service) Update(ctx context.Context, callerID, assetID, title string, c
 	if existing.Type == AssetTypeNote {
 		s.publishEvent(ctx, EventNoteUpdated, assetID, existing.OwnerID)
 	}
+	s.rdb.Del(ctx, cache.AssetKey(assetID))
 	return updated, nil
 }
 
@@ -157,7 +204,13 @@ func (s *service) Share(ctx context.Context, callerID, assetID, targetUserID, ac
 	}
 	if asset.Type == AssetTypeFolder {
 		s.publishEvent(ctx, EventFolderShared, assetID, asset.OwnerID)
+		if descendants, err := s.repo.GetDescendantIDs(ctx, assetID); err == nil {
+			for _, id := range descendants {
+				s.rdb.Del(ctx, cache.AssetACLKey(id))
+			}
+		}
 	}
+	s.rdb.Del(ctx, cache.AssetACLKey(assetID))
 	return nil
 }
 
