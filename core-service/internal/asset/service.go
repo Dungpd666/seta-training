@@ -159,8 +159,18 @@ func (s *service) Delete(ctx context.Context, callerID, assetID string) error {
 	if existing.OwnerID != callerID {
 		return ErrForbidden
 	}
+	var descendants []string
+	if existing.Type == AssetTypeFolder {
+		descendants, _ = s.repo.GetDescendantIDs(ctx, assetID)
+	}
 	if err := s.repo.Delete(ctx, assetID); err != nil {
 		return err
+	}
+	s.rdb.Del(ctx, cache.AssetKey(assetID))
+	s.rdb.Del(ctx, cache.AssetACLKey(assetID))
+	for _, id := range descendants {
+		s.rdb.Del(ctx, cache.AssetKey(id))
+		s.rdb.Del(ctx, cache.AssetACLKey(id))
 	}
 	if existing.Type == AssetTypeFolder {
 		s.publishEvent(ctx, EventFolderDeleted, assetID, existing.OwnerID)
@@ -222,9 +232,20 @@ func (s *service) RevokeShare(ctx context.Context, callerID, assetID, targetUser
 	if asset.OwnerID != callerID {
 		return ErrForbidden
 	}
-	return s.applyACLCascade(ctx, assetID, asset.Type, func(id string) error {
+	if err := s.applyACLCascade(ctx, assetID, asset.Type, func(id string) error {
 		return s.repo.DeleteACLEntry(ctx, id, targetUserID)
-	})
+	}); err != nil {
+		return err
+	}
+	if asset.Type == AssetTypeFolder {
+		if descendants, err := s.repo.GetDescendantIDs(ctx, assetID); err == nil {
+			for _, id := range descendants {
+				s.rdb.Del(ctx, cache.AssetACLKey(id))
+			}
+		}
+	}
+	s.rdb.Del(ctx, cache.AssetACLKey(assetID))
+	return nil
 }
 
 func (s *service) publishEvent(ctx context.Context, eventType, assetID, ownerID string) {
