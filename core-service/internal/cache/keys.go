@@ -1,11 +1,5 @@
 package cache
 
-const (
-	KeyTeamMembers = "team:%s:members"
-	KeyAsset       = "asset:%s"
-	KeyAssetACL    = "asset:%s:acl"
-)
-
 func TeamMembersKey(teamID string) string {
 	return "team:" + teamID + ":members"
 }

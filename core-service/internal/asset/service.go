@@ -116,7 +116,9 @@ func (s *service) cachedACL(ctx context.Context, assetID string) ([]*AssetACL, e
 	cacheKey := cache.AssetACLKey(assetID)
 	if cached, err := s.rdb.Get(ctx, cacheKey).Result(); err == nil {
 		var entries []*AssetACL
-		if err := json.Unmarshal([]byte(cached), &entries); err == nil {
+		if jsonErr := json.Unmarshal([]byte(cached), &entries); jsonErr != nil {
+			log.Warn().Err(jsonErr).Str("asset_id", assetID).Msg("failed to unmarshal cached ACL")
+		} else {
 			return entries, nil
 		}
 	}
@@ -161,7 +163,11 @@ func (s *service) Delete(ctx context.Context, callerID, assetID string) error {
 	}
 	var descendants []string
 	if existing.Type == AssetTypeFolder {
-		descendants, _ = s.repo.GetDescendantIDs(ctx, assetID)
+		var descErr error
+		descendants, descErr = s.repo.GetDescendantIDs(ctx, assetID)
+		if descErr != nil {
+			log.Warn().Err(descErr).Str("asset_id", assetID).Msg("failed to fetch descendants for cache invalidation")
+		}
 	}
 	if err := s.repo.Delete(ctx, assetID); err != nil {
 		return err
@@ -207,17 +213,16 @@ func (s *service) Share(ctx context.Context, callerID, assetID, targetUserID, ac
 	if !exists {
 		return ErrTargetUserNotFound
 	}
-	if err := s.applyACLCascade(ctx, assetID, asset.Type, func(id string) error {
+	descendants, err := s.applyACLCascade(ctx, assetID, asset.Type, func(id string) error {
 		return s.repo.UpsertACLEntry(ctx, id, targetUserID, accessLevel)
-	}); err != nil {
+	})
+	if err != nil {
 		return err
 	}
 	if asset.Type == AssetTypeFolder {
 		s.publishEvent(ctx, EventFolderShared, assetID, asset.OwnerID)
-		if descendants, err := s.repo.GetDescendantIDs(ctx, assetID); err == nil {
-			for _, id := range descendants {
-				s.rdb.Del(ctx, cache.AssetACLKey(id))
-			}
+		for _, id := range descendants {
+			s.rdb.Del(ctx, cache.AssetACLKey(id))
 		}
 	}
 	s.rdb.Del(ctx, cache.AssetACLKey(assetID))
@@ -232,17 +237,14 @@ func (s *service) RevokeShare(ctx context.Context, callerID, assetID, targetUser
 	if asset.OwnerID != callerID {
 		return ErrForbidden
 	}
-	if err := s.applyACLCascade(ctx, assetID, asset.Type, func(id string) error {
+	descendants, err := s.applyACLCascade(ctx, assetID, asset.Type, func(id string) error {
 		return s.repo.DeleteACLEntry(ctx, id, targetUserID)
-	}); err != nil {
+	})
+	if err != nil {
 		return err
 	}
-	if asset.Type == AssetTypeFolder {
-		if descendants, err := s.repo.GetDescendantIDs(ctx, assetID); err == nil {
-			for _, id := range descendants {
-				s.rdb.Del(ctx, cache.AssetACLKey(id))
-			}
-		}
+	for _, id := range descendants {
+		s.rdb.Del(ctx, cache.AssetACLKey(id))
 	}
 	s.rdb.Del(ctx, cache.AssetACLKey(assetID))
 	return nil
@@ -259,21 +261,21 @@ func (s *service) publishEvent(ctx context.Context, eventType, assetID, ownerID 
 	}
 }
 
-func (s *service) applyACLCascade(ctx context.Context, assetID, assetType string, apply func(string) error) error {
+func (s *service) applyACLCascade(ctx context.Context, assetID, assetType string, apply func(string) error) ([]string, error) {
 	if err := apply(assetID); err != nil {
-		return err
+		return nil, err
 	}
 	if assetType != AssetTypeFolder {
-		return nil
+		return nil, nil
 	}
 	descendants, err := s.repo.GetDescendantIDs(ctx, assetID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	for _, id := range descendants {
 		if err := apply(id); err != nil {
-			return err
+			return nil, err
 		}
 	}
-	return nil
+	return descendants, nil
 }
