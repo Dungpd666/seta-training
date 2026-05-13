@@ -84,6 +84,46 @@ func (q *Queries) GetTeamByID(ctx context.Context, teamID string) (Team, error) 
 	return i, err
 }
 
+const getTeamMembers = `-- name: GetTeamMembers :many
+SELECT tm.user_id, tm.role, up.username, up.email 
+FROM team_members tm
+JOIN users_projection up ON up.user_id = tm.user_id AND up.deleted_at IS NULL
+WHERE tm.team_id = $1
+ORDER BY tm.role, up.username
+`
+
+type GetTeamMembersRow struct {
+	UserID   string
+	Role     string
+	Username string
+	Email    string
+}
+
+func (q *Queries) GetTeamMembers(ctx context.Context, teamID string) ([]GetTeamMembersRow, error) {
+	rows, err := q.db.Query(ctx, getTeamMembers, teamID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetTeamMembersRow
+	for rows.Next() {
+		var i GetTeamMembersRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.Role,
+			&i.Username,
+			&i.Email,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getUserProjectionByID = `-- name: GetUserProjectionByID :one
 SELECT user_id, username, email, role, deleted_at, updated_at FROM users_projection WHERE user_id = $1
 AND deleted_at IS NULL

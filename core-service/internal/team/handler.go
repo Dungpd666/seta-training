@@ -133,3 +133,18 @@ func (h *Handler) RemoveManager(c *gin.Context) {
 	}
 	c.Status(http.StatusNoContent)
 }
+
+func (h *Handler) GetMembers(c *gin.Context) {
+	teamID := c.Param("id")
+	callerID, ok := middleware.CallerID(c)
+	if !ok {
+		response.Error(c, http.StatusUnauthorized, response.ErrUnauthorized, "missing caller")
+		return
+	}
+
+	members, err := h.svc.GetMembers(c.Request.Context(), teamID, callerID)
+	if writeTeamErr(c, err) {
+		return
+	}
+	response.Success(c, members)
+}

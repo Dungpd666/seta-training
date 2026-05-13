@@ -21,11 +21,11 @@ func initServices(ctx context.Context, cfg *config.Config, dbPool *pgxpool.Pool,
 	StartAuditConsumer(ctx, cfg.KafkaBrokers, q)
 
 	teamRepo := team.NewRepository(q)
-	teamSvc := team.NewService(teamRepo, producer)
+	teamSvc := team.NewService(teamRepo, rdb, producer)
 	teamHandler := team.NewHandler(teamSvc)
 
 	assetRepo := asset.NewRepository(q)
-	assetSvc := asset.NewService(assetRepo, producer)
+	assetSvc := asset.NewService(assetRepo, rdb, producer)
 	assetHandler := asset.NewHandler(assetSvc)
 
 	jwks := middleware.NewJWKSClient(cfg.JWKSUrl, cfg.JWTIssuer, cfg.JWTAudience)

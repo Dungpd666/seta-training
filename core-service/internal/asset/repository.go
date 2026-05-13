@@ -15,6 +15,7 @@ type Repository interface {
 	Update(ctx context.Context, assetID, title string, content *string) (*Asset, error)
 	Delete(ctx context.Context, assetID string) error
 	GetACLEntry(ctx context.Context, assetID, userID string) (*AssetACL, error)
+	ListACLByAsset(ctx context.Context, assetID string) ([]*AssetACL, error)
 	UpsertACLEntry(ctx context.Context, assetID, userID, accessLevel string) error
 	DeleteACLEntry(ctx context.Context, assetID, userID string) error
 	GetDescendantIDs(ctx context.Context, assetID string) ([]string, error)
@@ -101,6 +102,18 @@ func (r *repo) GetACLEntry(ctx context.Context, assetID, userID string) (*AssetA
 		return nil, err
 	}
 	return &AssetACL{AssetID: row.AssetID, UserID: row.UserID, AccessLevel: row.AccessLevel}, nil
+}
+
+func (r *repo) ListACLByAsset(ctx context.Context, assetID string) ([]*AssetACL, error) {
+	rows, err := r.q.ListAssetACL(ctx, assetID)
+	if err != nil {
+		return nil, err
+	}
+	acls := make([]*AssetACL, len(rows))
+	for i, row := range rows {
+		acls[i] = &AssetACL{AssetID: row.AssetID, UserID: row.UserID, AccessLevel: row.AccessLevel}
+	}
+	return acls, nil
 }
 
 func (r *repo) UpsertACLEntry(ctx context.Context, assetID, userID, accessLevel string) error {

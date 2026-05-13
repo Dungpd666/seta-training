@@ -74,6 +74,30 @@ func (q *Queries) GetDescendantIDs(ctx context.Context, parentID pgtype.Text) ([
 	return items, nil
 }
 
+const listAssetACL = `-- name: ListAssetACL :many
+SELECT asset_id, user_id, access_level FROM asset_acl WHERE asset_id = $1
+`
+
+func (q *Queries) ListAssetACL(ctx context.Context, assetID string) ([]AssetAcl, error) {
+	rows, err := q.db.Query(ctx, listAssetACL, assetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AssetAcl
+	for rows.Next() {
+		var i AssetAcl
+		if err := rows.Scan(&i.AssetID, &i.UserID, &i.AccessLevel); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const upsertAssetACL = `-- name: UpsertAssetACL :exec
 INSERT INTO asset_acl (asset_id, user_id, access_level)
 VALUES ($1, $2, $3)

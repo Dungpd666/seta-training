@@ -3,11 +3,16 @@ package team_test
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/dungpd/seta/core-service/internal/team"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
+
+type mockPublisher struct{}
+
+func (m *mockPublisher) Publish(_ context.Context, _ string, _ any) error { return nil }
 
 type mockTeamRepo struct {
 	teams   map[string]*team.Team
@@ -59,4 +64,15 @@ func (m *mockTeamRepo) GetMemberRole(_ context.Context, teamID, userID string) (
 
 func (m *mockTeamRepo) GetUserByID(_ context.Context, userID string) (*team.UserProjection, error) {
 	return &team.UserProjection{UserID: userID}, nil
+}
+
+func (m *mockTeamRepo) ListMembers(_ context.Context, teamID string) ([]*team.TeamMember, error) {
+	prefix := teamID + ":"
+	var members []*team.TeamMember
+	for key, role := range m.members {
+		if strings.HasPrefix(key, prefix) {
+			members = append(members, &team.TeamMember{UserID: key[len(prefix):], Role: role})
+		}
+	}
+	return members, nil
 }

@@ -2,9 +2,12 @@ package asset
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 
+	"github.com/dungpd/seta/core-service/internal/cache"
+	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog/log"
 )
 
@@ -20,10 +23,11 @@ type Service interface {
 type service struct {
 	repo      Repository
 	publisher Publisher
+	rdb       *redis.Client
 }
 
-func NewService(repo Repository, publisher Publisher) Service {
-	return &service{repo: repo, publisher: publisher}
+func NewService(repo Repository, rdb *redis.Client, publisher Publisher) Service {
+	return &service{repo: repo, publisher: publisher, rdb: rdb}
 }
 
 func (s *service) Create(ctx context.Context, callerID string, parentID *string, assetType, title string, content *string) (*Asset, error) {
@@ -62,20 +66,42 @@ func (s *service) Create(ctx context.Context, callerID string, parentID *string,
 }
 
 func (s *service) GetByID(ctx context.Context, callerID, assetID string) (*Asset, error) {
-	existing, err := s.repo.GetByID(ctx, assetID)
-	if err != nil {
-		return nil, err
+	assetCacheKey := cache.AssetKey(assetID)
+	cached, err := s.rdb.Get(ctx, assetCacheKey).Result()
+	var existing *Asset
+	if err == nil {
+		if jsonErr := json.Unmarshal([]byte(cached), &existing); jsonErr != nil {
+			log.Warn().Err(jsonErr).Str("asset_id", assetID).Msg("failed to unmarshal cached asset")
+			existing = nil
+		}
 	}
+
+	if existing == nil {
+		existing, err = s.repo.GetByID(ctx, assetID)
+		if err != nil {
+			return nil, err
+		}
+		if data, marshalErr := json.Marshal(existing); marshalErr != nil {
+			log.Warn().Err(marshalErr).Str("asset_id", assetID).Msg("failed to marshal asset for cache")
+		} else {
+			s.rdb.Set(ctx, assetCacheKey, data, 5*time.Minute)
+		}
+	}
+
 	if existing.OwnerID == callerID {
 		return existing, nil
 	}
-	acl, err := s.repo.GetACLEntry(ctx, assetID, callerID)
+
+	aclEntries, err := s.cachedACL(ctx, assetID)
 	if err != nil {
 		return nil, err
 	}
-	if acl != nil {
-		return existing, nil
+	for _, a := range aclEntries {
+		if a.UserID == callerID {
+			return existing, nil
+		}
 	}
+
 	isManager, err := s.repo.IsManagerOfOwner(ctx, callerID, existing.OwnerID)
 	if err != nil {
 		return nil, err
@@ -84,6 +110,28 @@ func (s *service) GetByID(ctx context.Context, callerID, assetID string) (*Asset
 		return existing, nil
 	}
 	return nil, ErrForbidden
+}
+
+func (s *service) cachedACL(ctx context.Context, assetID string) ([]*AssetACL, error) {
+	cacheKey := cache.AssetACLKey(assetID)
+	if cached, err := s.rdb.Get(ctx, cacheKey).Result(); err == nil {
+		var entries []*AssetACL
+		if jsonErr := json.Unmarshal([]byte(cached), &entries); jsonErr != nil {
+			log.Warn().Err(jsonErr).Str("asset_id", assetID).Msg("failed to unmarshal cached ACL")
+		} else {
+			return entries, nil
+		}
+	}
+	entries, err := s.repo.ListACLByAsset(ctx, assetID)
+	if err != nil {
+		return nil, err
+	}
+	if data, marshalErr := json.Marshal(entries); marshalErr != nil {
+		log.Warn().Err(marshalErr).Str("asset_id", assetID).Msg("failed to marshal ACL for cache")
+	} else {
+		s.rdb.Set(ctx, cacheKey, data, 5*time.Minute)
+	}
+	return entries, nil
 }
 
 func (s *service) Update(ctx context.Context, callerID, assetID, title string, content *string) (*Asset, error) {
@@ -101,6 +149,7 @@ func (s *service) Update(ctx context.Context, callerID, assetID, title string, c
 	if existing.Type == AssetTypeNote {
 		s.publishEvent(ctx, EventNoteUpdated, assetID, existing.OwnerID)
 	}
+	s.rdb.Del(ctx, cache.AssetKey(assetID))
 	return updated, nil
 }
 
@@ -112,8 +161,22 @@ func (s *service) Delete(ctx context.Context, callerID, assetID string) error {
 	if existing.OwnerID != callerID {
 		return ErrForbidden
 	}
+	var descendants []string
+	if existing.Type == AssetTypeFolder {
+		var descErr error
+		descendants, descErr = s.repo.GetDescendantIDs(ctx, assetID)
+		if descErr != nil {
+			log.Warn().Err(descErr).Str("asset_id", assetID).Msg("failed to fetch descendants for cache invalidation")
+		}
+	}
 	if err := s.repo.Delete(ctx, assetID); err != nil {
 		return err
+	}
+	s.rdb.Del(ctx, cache.AssetKey(assetID))
+	s.rdb.Del(ctx, cache.AssetACLKey(assetID))
+	for _, id := range descendants {
+		s.rdb.Del(ctx, cache.AssetKey(id))
+		s.rdb.Del(ctx, cache.AssetACLKey(id))
 	}
 	if existing.Type == AssetTypeFolder {
 		s.publishEvent(ctx, EventFolderDeleted, assetID, existing.OwnerID)
@@ -150,14 +213,19 @@ func (s *service) Share(ctx context.Context, callerID, assetID, targetUserID, ac
 	if !exists {
 		return ErrTargetUserNotFound
 	}
-	if err := s.applyACLCascade(ctx, assetID, asset.Type, func(id string) error {
+	descendants, err := s.applyACLCascade(ctx, assetID, asset.Type, func(id string) error {
 		return s.repo.UpsertACLEntry(ctx, id, targetUserID, accessLevel)
-	}); err != nil {
+	})
+	if err != nil {
 		return err
 	}
 	if asset.Type == AssetTypeFolder {
 		s.publishEvent(ctx, EventFolderShared, assetID, asset.OwnerID)
+		for _, id := range descendants {
+			s.rdb.Del(ctx, cache.AssetACLKey(id))
+		}
 	}
+	s.rdb.Del(ctx, cache.AssetACLKey(assetID))
 	return nil
 }
 
@@ -169,9 +237,17 @@ func (s *service) RevokeShare(ctx context.Context, callerID, assetID, targetUser
 	if asset.OwnerID != callerID {
 		return ErrForbidden
 	}
-	return s.applyACLCascade(ctx, assetID, asset.Type, func(id string) error {
+	descendants, err := s.applyACLCascade(ctx, assetID, asset.Type, func(id string) error {
 		return s.repo.DeleteACLEntry(ctx, id, targetUserID)
 	})
+	if err != nil {
+		return err
+	}
+	for _, id := range descendants {
+		s.rdb.Del(ctx, cache.AssetACLKey(id))
+	}
+	s.rdb.Del(ctx, cache.AssetACLKey(assetID))
+	return nil
 }
 
 func (s *service) publishEvent(ctx context.Context, eventType, assetID, ownerID string) {
@@ -185,21 +261,21 @@ func (s *service) publishEvent(ctx context.Context, eventType, assetID, ownerID 
 	}
 }
 
-func (s *service) applyACLCascade(ctx context.Context, assetID, assetType string, apply func(string) error) error {
+func (s *service) applyACLCascade(ctx context.Context, assetID, assetType string, apply func(string) error) ([]string, error) {
 	if err := apply(assetID); err != nil {
-		return err
+		return nil, err
 	}
 	if assetType != AssetTypeFolder {
-		return nil
+		return nil, nil
 	}
 	descendants, err := s.repo.GetDescendantIDs(ctx, assetID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	for _, id := range descendants {
 		if err := apply(id); err != nil {
-			return err
+			return nil, err
 		}
 	}
-	return nil
+	return descendants, nil
 }

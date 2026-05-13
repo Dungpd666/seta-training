@@ -5,12 +5,16 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/dungpd/seta/core-service/internal/asset"
+	"github.com/redis/go-redis/v9"
 )
 
 func newSvc() (asset.Service, *mockAssetRepo) {
 	repo := newMockAssetRepo()
-	return asset.NewService(repo), repo
+	mr, _ := miniredis.Run()
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	return asset.NewService(repo, rdb, &mockPublisher{}), repo
 }
 
 func TestShare_FolderCascadesToChildNotes(t *testing.T) {

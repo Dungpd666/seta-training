@@ -34,3 +34,11 @@ SELECT EXISTS (
     AND tm_member.user_id = sqlc.arg(member_id)
     AND up.deleted_at IS NULL
 );
+
+-- name: GetTeamMembers :many
+SELECT tm.user_id, tm.role, up.username, up.email 
+FROM team_members tm
+JOIN users_projection up ON up.user_id = tm.user_id AND up.deleted_at IS NULL
+WHERE tm.team_id = $1
+ORDER BY tm.role, up.username; 
+
