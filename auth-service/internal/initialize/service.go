@@ -12,13 +12,15 @@ func initServices(
 	cfg *config.Config,
 	dbPool *pgxpool.Pool,
 	rdb *redis.Client,
+	producer *KafkaProducer,
 ) (*auth.Handler, *user.Handler, auth.Service) {
 	userRepo := user.NewRepository(dbPool)
 	refreshRepo := auth.NewRefreshTokenRepository(dbPool)
 	userSvc := user.NewService(
 		userRepo,
 		user.WithWorkers(cfg.ImportWorkers),
+		user.WithPublisher(producer),
 	)
-	authSvc := auth.NewService(refreshRepo, cfg.PrivateKey, cfg.PublicKey, rdb)
+	authSvc := auth.NewService(refreshRepo, cfg.PrivateKey, cfg.PublicKey, rdb, cfg.JWTIssuer, cfg.JWTAudience)
 	return auth.NewHandler(userSvc, authSvc), user.NewHandler(userSvc), authSvc
 }

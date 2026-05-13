@@ -10,7 +10,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 )
-
 const (
 	CtxUserID = "user_id"
 	CtxRole   = "role"
@@ -32,8 +31,6 @@ func JWTAuth(v TokenValidator) gin.HandlerFunc {
 
 		claims, err := v.ParseToken(
 			strings.TrimPrefix(authHeader, "Bearer "),
-			jwt.WithIssuer(auth.Issuer),
-			jwt.WithAudience(auth.Audience),
 			jwt.WithExpirationRequired(),
 		)
 		if err != nil {

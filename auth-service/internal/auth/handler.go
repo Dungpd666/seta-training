@@ -10,7 +10,21 @@ import (
 	"github.com/dungpd/seta/auth-service/internal/response"
 	"github.com/dungpd/seta/auth-service/internal/user"
 	"github.com/gin-gonic/gin"
+	"github.com/rs/zerolog/log"
 )
+
+func writeAuthErr(c *gin.Context, err error) bool {
+	switch {
+	case errors.Is(err, ErrInvalidToken) || errors.Is(err, ErrTokenRevoked):
+		response.Error(c, http.StatusUnauthorized, response.ErrUnauthorized, err.Error())
+	case err != nil:
+		log.Error().Err(err).Msg("internal error")
+		response.Error(c, http.StatusInternalServerError, response.ErrInternal, "internal server error")
+	default:
+		return false
+	}
+	return true
+}
 
 type RegisterRequest struct {
 	Username string `json:"username" binding:"required"`
@@ -48,12 +62,7 @@ func (h *Handler) Register(c *gin.Context) {
 		return
 	}
 	u, err := h.userSvc.Register(c.Request.Context(), req.Username, req.Email, req.Password, req.Role)
-	if err != nil {
-		if errors.Is(err, user.ErrEmailInUse) {
-			response.Error(c, http.StatusConflict, response.ErrConflict, err.Error())
-			return
-		}
-		response.Error(c, http.StatusBadRequest, response.ErrBadRequest, err.Error())
+	if user.WriteUserErr(c, err) {
 		return
 	}
 	response.SuccessWithStatus(c, http.StatusCreated, gin.H{
@@ -72,12 +81,12 @@ func (h *Handler) Login(c *gin.Context) {
 	}
 	ctx := c.Request.Context()
 	u, err := h.userSvc.Login(ctx, req.Email, req.Password)
-	if err != nil {
-		response.Error(c, http.StatusUnauthorized, response.ErrUnauthorized, "invalid credentials")
+	if user.WriteUserErr(c, err) {
 		return
 	}
 	accessToken, refreshToken, err := h.authSvc.GenerateTokenPair(ctx, u.UserID, u.Role)
 	if err != nil {
+		log.Error().Err(err).Msg("internal error")
 		response.Error(c, http.StatusInternalServerError, response.ErrInternal, "failed to generate tokens")
 		return
 	}
@@ -91,8 +100,7 @@ func (h *Handler) Refresh(c *gin.Context) {
 		return
 	}
 	accessToken, refreshToken, err := h.authSvc.RotateRefreshToken(c.Request.Context(), req.RefreshToken)
-	if err != nil {
-		response.Error(c, http.StatusUnauthorized, response.ErrUnauthorized, err.Error())
+	if writeAuthErr(c, err) {
 		return
 	}
 	response.Success(c, gin.H{"access_token": accessToken, "refresh_token": refreshToken})
@@ -110,7 +118,12 @@ func (h *Handler) Logout(c *gin.Context) {
 		return
 	}
 	if err := h.authSvc.RevokeSession(c.Request.Context(), strings.TrimPrefix(authHeader, "Bearer "), req.RefreshToken); err != nil {
-		response.Error(c, http.StatusUnauthorized, response.ErrUnauthorized, err.Error())
+		if errors.Is(err, ErrInvalidToken) {
+			response.Error(c, http.StatusUnauthorized, response.ErrUnauthorized, err.Error())
+		} else {
+			log.Error().Err(err).Msg("internal error")
+			response.Error(c, http.StatusInternalServerError, response.ErrInternal, "internal server error")
+		}
 		return
 	}
 	c.Status(http.StatusNoContent)

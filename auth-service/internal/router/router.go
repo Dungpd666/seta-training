@@ -19,6 +19,7 @@ func New(
 ) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Recovery())
+	r.Use(middleware.RequestID())
 	r.Use(requestLogger())
 
 	r.GET("/health", healthCheck(dbPool))

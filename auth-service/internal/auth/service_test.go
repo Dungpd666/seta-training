@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
+	"errors"
 	"os"
 	"testing"
 
@@ -32,7 +33,7 @@ func newAuthSvc(t *testing.T) (auth.Service, *mockRefreshRepo) {
 	mr := miniredis.RunT(t)
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	repo := newMockRefreshRepo()
-	return auth.NewService(repo, testPrivKey, testPubKey, rdb), repo
+	return auth.NewService(repo, testPrivKey, testPubKey, rdb, "auth-service", "seta"), repo
 }
 
 func TestGenerateTokenPair_ClaimsCorrect(t *testing.T) {
@@ -121,11 +122,8 @@ func TestRotateRefreshToken_ReuseDetected(t *testing.T) {
 	}
 
 	_, _, err = svc.RotateRefreshToken(ctx, refreshToken)
-	if err == nil {
-		t.Fatal("expected reuse error, got nil")
-	}
-	if err.Error() != "refresh token reuse detected" {
-		t.Errorf("error = %q, want %q", err.Error(), "refresh token reuse detected")
+	if !errors.Is(err, auth.ErrTokenRevoked) {
+		t.Errorf("expected ErrTokenRevoked, got: %v", err)
 	}
 
 	repo.mu.Lock()
