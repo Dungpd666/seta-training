@@ -81,11 +81,11 @@ func WithPublisher(p EventPublisher) Option {
 	}
 }
 
-func (s *service) publish(topic string, event any) {
+func (s *service) publish(ctx context.Context, topic string, event any) {
 	if s.publisher == nil {
 		return
 	}
-	if err := s.publisher.Publish(context.Background(), topic, event); err != nil {
+	if err := s.publisher.Publish(context.WithoutCancel(ctx), topic, event); err != nil {
 		log.Error().Err(err).Str("topic", topic).Msg("event publish failed")
 	}
 }
@@ -118,7 +118,7 @@ func (s *service) Register(ctx context.Context, username, email, password, role 
 		return nil, err
 	}
 
-	s.publish(TopicUserEvents, UserEvent{
+	s.publish(ctx, TopicUserEvents, UserEvent{
 		Type:     EventUserCreated,
 		UserID:   u.UserID,
 		UserName: u.Username,
@@ -192,7 +192,7 @@ func (s *service) ImportFromCSV(ctx context.Context, r io.Reader, workers int) (
 		return result.Errors[i].Row < result.Errors[j].Row
 	})
 
-	s.publish(TopicUserEvents, UsersImportedEvent{
+	s.publish(ctx, TopicUserEvents, UsersImportedEvent{
 		Type:      EventUsersImported,
 		Succeeded: result.Succeeded,
 		Failed:    result.Failed,

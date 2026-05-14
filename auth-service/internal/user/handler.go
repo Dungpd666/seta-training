@@ -67,11 +67,6 @@ func (h *Handler) ImportUsers(c *gin.Context) {
 		return
 	}
 
-	if fileHeader.Size > maxImportFileSize {
-		response.Error(c, http.StatusRequestEntityTooLarge, response.ErrBadRequest, "file size exceeds limit(10MB)")
-		return
-	}
-
 	file, err := fileHeader.Open()
 	if err != nil {
 		response.Error(c, http.StatusInternalServerError, response.ErrInternal, "failed to open file")
