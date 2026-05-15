@@ -14,3 +14,15 @@ RETURNING *;
 
 -- name: DeleteAsset :exec
 DELETE FROM assets WHERE asset_id = $1;
+
+-- name: ListAssets :many 
+SELECT asset_id, owner_id, parent_id, type, title, content, created_at
+FROM assets 
+WHERE owner_id = $1 
+ORDER BY created_at DESC 
+LIMIT $2 
+OFFSET $3;
+
+-- name: CountAssetsByOwner :one 
+SELECT COUNT(*) FROM assets WHERE owner_id = $1;
+
