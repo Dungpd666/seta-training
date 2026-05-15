@@ -11,6 +11,17 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countAssetsByOwner = `-- name: CountAssetsByOwner :one
+SELECT COUNT(*) FROM assets WHERE owner_id = $1
+`
+
+func (q *Queries) CountAssetsByOwner(ctx context.Context, ownerID string) (int64, error) {
+	row := q.db.QueryRow(ctx, countAssetsByOwner, ownerID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createAsset = `-- name: CreateAsset :one
 INSERT INTO assets (owner_id, parent_id, type, title, content) 
 VALUES ($1, $2, $3, $4, $5) 
@@ -72,6 +83,49 @@ func (q *Queries) GetAssetByID(ctx context.Context, assetID string) (Asset, erro
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const listAssets = `-- name: ListAssets :many
+SELECT asset_id, owner_id, parent_id, type, title, content, created_at
+FROM assets 
+WHERE owner_id = $1 
+ORDER BY created_at DESC 
+LIMIT $2 
+OFFSET $3
+`
+
+type ListAssetsParams struct {
+	OwnerID string
+	Limit   int32
+	Offset  int32
+}
+
+func (q *Queries) ListAssets(ctx context.Context, arg ListAssetsParams) ([]Asset, error) {
+	rows, err := q.db.Query(ctx, listAssets, arg.OwnerID, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Asset
+	for rows.Next() {
+		var i Asset
+		if err := rows.Scan(
+			&i.AssetID,
+			&i.OwnerID,
+			&i.ParentID,
+			&i.Type,
+			&i.Title,
+			&i.Content,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const updateAsset = `-- name: UpdateAsset :one

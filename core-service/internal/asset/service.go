@@ -18,6 +18,7 @@ type Service interface {
 	Delete(ctx context.Context, callerID, assetID string) error
 	Share(ctx context.Context, callerID, assetID, targetUserID, accessLevel string) error
 	RevokeShare(ctx context.Context, callerID, assetID, targetUserID string) error
+	List(ctx context.Context, callerID string, page, limit int) ([]*Asset, int64, error)
 }
 
 type service struct {
@@ -248,6 +249,19 @@ func (s *service) RevokeShare(ctx context.Context, callerID, assetID, targetUser
 	}
 	s.rdb.Del(ctx, cache.AssetACLKey(assetID))
 	return nil
+}
+
+func (s *service) List(ctx context.Context, callerID string, page, limit int) ([]*Asset, int64, error) {
+	total, err := s.repo.CountByOwner(ctx, callerID)
+	if err != nil {
+		return nil, 0, err
+	}
+	offset := int32((page - 1) * limit)
+	assets, err := s.repo.List(ctx, callerID, int32(limit), offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	return assets, total, nil
 }
 
 func (s *service) publishEvent(ctx context.Context, eventType, assetID, ownerID string) {

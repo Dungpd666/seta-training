@@ -108,3 +108,31 @@ func (m *mockAssetRepo) ListACLByAsset(_ context.Context, assetID string) ([]*as
 	}
 	return entries, nil
 }
+
+func (m *mockAssetRepo) List(_ context.Context, ownerID string, limit, offset int32) ([]*asset.Asset, error) {
+	var result []*asset.Asset
+	for _, a := range m.assets {
+		if a.OwnerID == ownerID {
+			result = append(result, a)
+		}
+	}
+	start := int(offset)
+	if start >= len(result) {
+		return []*asset.Asset{}, nil
+	}
+	end := start + int(limit)
+	if end > len(result) {
+		end = len(result)
+	}
+	return result[start:end], nil
+}
+
+func (m *mockAssetRepo) CountByOwner(_ context.Context, ownerID string) (int64, error) {
+	var count int64
+	for _, a := range m.assets {
+		if a.OwnerID == ownerID {
+			count++
+		}
+	}
+	return count, nil
+}

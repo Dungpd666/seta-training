@@ -3,6 +3,7 @@ package asset
 import (
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/dungpd/seta/core-service/internal/middleware"
 	"github.com/dungpd/seta/core-service/internal/response"
@@ -124,6 +125,40 @@ func (h *Handler) Share(c *gin.Context) {
 		return
 	}
 	c.Status(http.StatusNoContent)
+}
+
+func (h *Handler) List(c *gin.Context) {
+	callerID, ok := middleware.CallerID(c)
+	if !ok {
+		response.Error(c, http.StatusUnauthorized, response.ErrUnauthorized, "missing caller")
+		return
+	}
+
+	limitStr := c.DefaultQuery("limit", "20")
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit <= 0 || limit > 100 {
+		response.Error(c, http.StatusBadRequest, response.ErrBadRequest, "limit must be between 1 and 100")
+		return
+	}
+
+	pageStr := c.DefaultQuery("page", "1")
+	page, err := strconv.Atoi(pageStr)
+	if err != nil || page < 1 {
+		response.Error(c, http.StatusBadRequest, response.ErrBadRequest, "page must be >= 1")
+		return
+	}
+
+	assets, total, err := h.svc.List(c.Request.Context(), callerID, page, limit)
+	if writeAssetErr(c, err) {
+		return
+	}
+
+	response.Paginated(c, assets, response.PaginationMeta{
+		Total:      total,
+		Page:       page,
+		Limit:      limit,
+		NextCursor: "",
+	})
 }
 
 func (h *Handler) RevokeShare(c *gin.Context) {

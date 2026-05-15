@@ -21,6 +21,8 @@ type Repository interface {
 	GetDescendantIDs(ctx context.Context, assetID string) ([]string, error)
 	IsManagerOfOwner(ctx context.Context, callerID, ownerID string) (bool, error)
 	UserExists(ctx context.Context, userID string) (bool, error)
+	List(ctx context.Context, ownerID string, limit, offset int32) ([]*Asset, error)
+	CountByOwner(ctx context.Context, ownerID string) (int64, error)
 }
 
 type repo struct {
@@ -151,6 +153,26 @@ func (r *repo) UserExists(ctx context.Context, userID string) (bool, error) {
 		return false, err
 	}
 	return true, nil
+}
+
+func (r *repo) List(ctx context.Context, ownerID string, limit, offset int32) ([]*Asset, error) {
+	rows, err := r.q.ListAssets(ctx, db.ListAssetsParams{
+		OwnerID: ownerID,
+		Limit:   limit,
+		Offset:  offset,
+	})
+	if err != nil {
+		return nil, err
+	}
+	assets := make([]*Asset, len(rows))
+	for i, row := range rows {
+		assets[i] = rowToAsset(row)
+	}
+	return assets, nil
+}
+
+func (r *repo) CountByOwner(ctx context.Context, ownerID string) (int64, error) {
+	return r.q.CountAssetsByOwner(ctx, ownerID)
 }
 
 func rowToAsset(row db.Asset) *Asset {
