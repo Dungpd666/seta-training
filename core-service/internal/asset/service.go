@@ -154,6 +154,20 @@ func (s *service) Update(ctx context.Context, callerID, assetID, title string, c
 	return updated, nil
 }
 
+func (s *service) requireWriteAccess(ctx context.Context, asset *Asset, callerID string) error {
+	if asset.OwnerID == callerID {
+		return nil
+	}
+	acl, err := s.repo.GetACLEntry(ctx, asset.AssetID, callerID)
+	if err != nil {
+		return err
+	}
+	if acl == nil || acl.AccessLevel != AccessLevelWrite {
+		return ErrForbidden
+	}
+	return nil
+}
+
 func (s *service) Delete(ctx context.Context, callerID, assetID string) error {
 	existing, err := s.repo.GetByID(ctx, assetID)
 	if err != nil {
@@ -181,20 +195,6 @@ func (s *service) Delete(ctx context.Context, callerID, assetID string) error {
 	}
 	if existing.Type == AssetTypeFolder {
 		s.publishEvent(ctx, EventFolderDeleted, assetID, existing.OwnerID)
-	}
-	return nil
-}
-
-func (s *service) requireWriteAccess(ctx context.Context, asset *Asset, callerID string) error {
-	if asset.OwnerID == callerID {
-		return nil
-	}
-	acl, err := s.repo.GetACLEntry(ctx, asset.AssetID, callerID)
-	if err != nil {
-		return err
-	}
-	if acl == nil || acl.AccessLevel != AccessLevelWrite {
-		return ErrForbidden
 	}
 	return nil
 }
@@ -251,6 +251,25 @@ func (s *service) RevokeShare(ctx context.Context, callerID, assetID, targetUser
 	return nil
 }
 
+func (s *service) applyACLCascade(ctx context.Context, assetID, assetType string, apply func(string) error) ([]string, error) {
+	if err := apply(assetID); err != nil {
+		return nil, err
+	}
+	if assetType != AssetTypeFolder {
+		return nil, nil
+	}
+	descendants, err := s.repo.GetDescendantIDs(ctx, assetID)
+	if err != nil {
+		return nil, err
+	}
+	for _, id := range descendants {
+		if err := apply(id); err != nil {
+			return nil, err
+		}
+	}
+	return descendants, nil
+}
+
 func (s *service) List(ctx context.Context, callerID string, page, limit int) ([]*Asset, int64, error) {
 	total, err := s.repo.CountByOwner(ctx, callerID)
 	if err != nil {
@@ -273,23 +292,4 @@ func (s *service) publishEvent(ctx context.Context, eventType, assetID, ownerID 
 	}); err != nil {
 		log.Warn().Err(err).Str("event", eventType).Msg("failed to publish asset event")
 	}
-}
-
-func (s *service) applyACLCascade(ctx context.Context, assetID, assetType string, apply func(string) error) ([]string, error) {
-	if err := apply(assetID); err != nil {
-		return nil, err
-	}
-	if assetType != AssetTypeFolder {
-		return nil, nil
-	}
-	descendants, err := s.repo.GetDescendantIDs(ctx, assetID)
-	if err != nil {
-		return nil, err
-	}
-	for _, id := range descendants {
-		if err := apply(id); err != nil {
-			return nil, err
-		}
-	}
-	return descendants, nil
 }
