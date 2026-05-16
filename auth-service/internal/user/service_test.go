@@ -111,7 +111,7 @@ func TestLogin_UserNotFound(t *testing.T) {
 	}
 }
 
-func TestListAll(t *testing.T) {
+func TestListPage(t *testing.T) {
 	repo := &mockRepo{
 		users: []*user.User{
 			{UserID: "1", Username: "a", Email: "a@x.com", Role: "member"},
@@ -120,9 +120,12 @@ func TestListAll(t *testing.T) {
 	}
 	svc := user.NewService(repo)
 
-	users, err := svc.ListAll(context.Background())
+	users, total, err := svc.ListPage(context.Background(), "", 20)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	if total != 2 {
+		t.Errorf("total = %d, want 2", total)
 	}
 	if len(users) != 2 {
 		t.Errorf("len = %d, want 2", len(users))

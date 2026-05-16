@@ -39,12 +39,23 @@ func (m *mockRepo) FindByEmail(_ context.Context, email string) (*user.User, err
 	return nil, nil
 }
 
-func (m *mockRepo) FindAll(_ context.Context) ([]user.User, error) {
+func (m *mockRepo) Count(_ context.Context) (int64, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	result := make([]user.User, len(m.users))
-	for i, u := range m.users {
-		result[i] = *u
+	return int64(len(m.users)), nil
+}
+
+func (m *mockRepo) FindPage(_ context.Context, cursor string, limit int32) ([]user.User, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var result []user.User
+	for _, u := range m.users {
+		if cursor == "" || u.UserID > cursor {
+			result = append(result, *u)
+		}
+		if int32(len(result)) == limit {
+			break
+		}
 	}
 	return result, nil
 }

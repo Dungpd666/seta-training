@@ -11,6 +11,13 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+type Repository interface {
+	Create(ctx context.Context, u *User) error
+	FindByEmail(ctx context.Context, email string) (*User, error)
+	FindPage(ctx context.Context, cursor string, limit int32) ([]User, error)
+	Count(ctx context.Context) (int64, error)
+}
+
 type repository struct {
 	queries *db.Queries
 }
@@ -58,8 +65,17 @@ func (r *repository) FindByEmail(ctx context.Context, email string) (*User, erro
 	}, nil
 }
 
-func (r *repository) FindAll(ctx context.Context) ([]User, error) {
-	rows, err := r.queries.ListUsers(ctx)
+func (r *repository) FindPage(ctx context.Context, cursor string, limit int32) ([]User, error) {
+	var rows []db.User
+	var err error
+	if cursor == "" {
+		rows, err = r.queries.ListUsersFromStart(ctx, limit)
+	} else {
+		rows, err = r.queries.ListUsersWithCursor(ctx, db.ListUsersWithCursorParams{
+			UserID: cursor,
+			Limit:  limit,
+		})
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -76,6 +92,10 @@ func (r *repository) FindAll(ctx context.Context) ([]User, error) {
 		}
 	}
 	return result, nil
+}
+
+func (r *repository) Count(ctx context.Context) (int64, error) {
+	return r.queries.CountUsers(ctx)
 }
 
 func toTime(value pgtype.Timestamptz) time.Time {

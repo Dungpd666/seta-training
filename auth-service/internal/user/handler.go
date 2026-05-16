@@ -36,7 +36,16 @@ func NewHandler(svc Service) *Handler {
 }
 
 func (h *Handler) ListUsers(c *gin.Context) {
-	users, err := h.svc.ListAll(c.Request.Context())
+	limitStr := c.DefaultQuery("limit", "20")
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit <= 0 || limit > 100 {
+		response.Error(c, http.StatusBadRequest, response.ErrBadRequest, "limit must be between 1 and 100")
+		return
+	}
+
+	cursor := c.Query("cursor")
+
+	users, total, err := h.svc.ListPage(c.Request.Context(), cursor, int32(limit))
 	if WriteUserErr(c, err) {
 		return
 	}
@@ -51,7 +60,18 @@ func (h *Handler) ListUsers(c *gin.Context) {
 			CreatedAt: u.CreatedAt,
 		}
 	}
-	response.Success(c, result)
+
+	nextCursor := ""
+	if len(users) == limit {
+		nextCursor = users[len(users)-1].UserID
+	}
+
+	response.Paginated(c, result, response.PaginationMeta{
+		Total:      total,
+		Page:       0,
+		Limit:      limit,
+		NextCursor: nextCursor,
+	})
 }
 
 func (h *Handler) ImportUsers(c *gin.Context) {
