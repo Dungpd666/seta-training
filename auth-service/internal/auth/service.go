@@ -14,6 +14,7 @@ import (
 const (
 	AccessTokenTTL   = 15 * time.Minute
 	refreshTokenTTL  = 7 * 24 * time.Hour
+	accessTokenType  = "access"
 	refreshTokenType = "refresh"
 	KeyID            = "auth-service-key"
 )
@@ -75,6 +76,7 @@ func (s *service) GenerateTokenPair(ctx context.Context, userID, role string) (a
 
 	accessClaims := Claims{
 		Role: role,
+		Type: accessTokenType,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   userID,
 			ID:        uuid.NewString(),
@@ -93,6 +95,7 @@ func (s *service) GenerateTokenPair(ctx context.Context, userID, role string) (a
 
 	refreshJTI := uuid.NewString()
 	refreshClaims := Claims{
+		Role: role,
 		Type: refreshTokenType,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   userID,
