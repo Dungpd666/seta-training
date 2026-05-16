@@ -15,6 +15,7 @@ const (
 	AccessTokenTTL   = 15 * time.Minute
 	refreshTokenTTL  = 7 * 24 * time.Hour
 	refreshTokenType = "refresh"
+	KeyID            = "auth-service-key"
 )
 
 type Claims struct {
@@ -83,7 +84,9 @@ func (s *service) GenerateTokenPair(ctx context.Context, userID, role string) (a
 			Audience:  jwt.ClaimStrings{s.audience},
 		},
 	}
-	accessToken, err = jwt.NewWithClaims(jwt.SigningMethodRS256, accessClaims).SignedString(s.privateKey)
+	accessTokenObj := jwt.NewWithClaims(jwt.SigningMethodRS256, accessClaims)
+	accessTokenObj.Header["kid"] = KeyID
+	accessToken, err = accessTokenObj.SignedString(s.privateKey)
 	if err != nil {
 		return
 	}
@@ -100,7 +103,9 @@ func (s *service) GenerateTokenPair(ctx context.Context, userID, role string) (a
 			Audience:  jwt.ClaimStrings{s.audience},
 		},
 	}
-	refreshToken, err = jwt.NewWithClaims(jwt.SigningMethodRS256, refreshClaims).SignedString(s.privateKey)
+	refreshTokenObj := jwt.NewWithClaims(jwt.SigningMethodRS256, refreshClaims)
+	refreshTokenObj.Header["kid"] = KeyID
+	refreshToken, err = refreshTokenObj.SignedString(s.privateKey)
 	if err != nil {
 		return
 	}
