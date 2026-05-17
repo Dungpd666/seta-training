@@ -223,6 +223,40 @@ func TestRevokeSession_RevokesRefreshToken(t *testing.T) {
 	}
 }
 
+func TestRevokeSession_RejectsCrossUserPair(t *testing.T) {
+	svc, _ := newAuthSvc(t)
+	ctx := context.Background()
+
+	atA, _, err := svc.GenerateTokenPair(ctx, "user-A", "member")
+	if err != nil {
+		t.Fatalf("GenerateTokenPair A: %v", err)
+	}
+	_, rtB, err := svc.GenerateTokenPair(ctx, "user-B", "member")
+	if err != nil {
+		t.Fatalf("GenerateTokenPair B: %v", err)
+	}
+
+	err = svc.RevokeSession(ctx, atA, rtB)
+	if !errors.Is(err, auth.ErrInvalidToken) {
+		t.Errorf("RevokeSession with mismatched subjects: err = %v, want ErrInvalidToken", err)
+	}
+}
+
+func TestRevokeSession_RejectsAccessTokenAsRefresh(t *testing.T) {
+	svc, _ := newAuthSvc(t)
+	ctx := context.Background()
+
+	at, _, err := svc.GenerateTokenPair(ctx, "user-1", "member")
+	if err != nil {
+		t.Fatalf("GenerateTokenPair: %v", err)
+	}
+
+	err = svc.RevokeSession(ctx, at, at)
+	if !errors.Is(err, auth.ErrInvalidToken) {
+		t.Errorf("RevokeSession with access token as refresh: err = %v, want ErrInvalidToken", err)
+	}
+}
+
 func TestIsBlacklisted_UnknownJTI(t *testing.T) {
 	svc, _ := newAuthSvc(t)
 

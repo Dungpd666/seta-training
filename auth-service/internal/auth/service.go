@@ -14,8 +14,8 @@ import (
 const (
 	AccessTokenTTL   = 15 * time.Minute
 	refreshTokenTTL  = 7 * 24 * time.Hour
-	accessTokenType  = "access"
-	refreshTokenType = "refresh"
+	AccessTokenType  = "access"
+	RefreshTokenType = "refresh"
 	KeyID            = "auth-service-key"
 )
 
@@ -76,7 +76,7 @@ func (s *service) GenerateTokenPair(ctx context.Context, userID, role string) (a
 
 	accessClaims := Claims{
 		Role: role,
-		Type: accessTokenType,
+		Type: AccessTokenType,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   userID,
 			ID:        uuid.NewString(),
@@ -96,7 +96,7 @@ func (s *service) GenerateTokenPair(ctx context.Context, userID, role string) (a
 	refreshJTI := uuid.NewString()
 	refreshClaims := Claims{
 		Role: role,
-		Type: refreshTokenType,
+		Type: RefreshTokenType,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   userID,
 			ID:        refreshJTI,
@@ -123,7 +123,7 @@ func (s *service) GenerateTokenPair(ctx context.Context, userID, role string) (a
 
 func (s *service) RotateRefreshToken(ctx context.Context, tokenStr string) (accessToken, refreshToken string, err error) {
 	claims, err := s.ParseToken(tokenStr, jwt.WithExpirationRequired())
-	if err != nil || claims.Type != refreshTokenType {
+	if err != nil || claims.Type != RefreshTokenType {
 		return "", "", ErrInvalidToken
 	}
 
@@ -149,8 +149,11 @@ func (s *service) RevokeSession(ctx context.Context, accessTokenStr, refreshToke
 		return ErrInvalidToken
 	}
 
-	refreshClaims, err := s.ParseToken(refreshTokenStr)
-	if err != nil {
+	refreshClaims, err := s.ParseToken(refreshTokenStr, jwt.WithExpirationRequired())
+	if err != nil || refreshClaims.Type != RefreshTokenType {
+		return ErrInvalidToken
+	}
+	if accessClaims.Subject != refreshClaims.Subject {
 		return ErrInvalidToken
 	}
 
