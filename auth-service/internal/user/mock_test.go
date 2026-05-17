@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/dungpd/seta/auth-service/internal/user"
+	"github.com/jackc/pgx/v5"
 )
 
 var errBoom = errors.New("boom")
@@ -22,6 +23,11 @@ func (m *mockRepo) Create(_ context.Context, u *user.User) error {
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	for _, existing := range m.users {
+		if existing.Email == u.Email {
+			return user.ErrEmailInUse
+		}
+	}
 	cp := *u
 	m.users = append(m.users, &cp)
 	return nil
@@ -36,7 +42,7 @@ func (m *mockRepo) FindByEmail(_ context.Context, email string) (*user.User, err
 			return &cp, nil
 		}
 	}
-	return nil, nil
+	return nil, pgx.ErrNoRows
 }
 
 func (m *mockRepo) Count(_ context.Context) (int64, error) {

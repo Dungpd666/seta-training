@@ -3,12 +3,14 @@ package user
 import (
 	"context"
 	"encoding/csv"
+	"errors"
 	"fmt"
 	"io"
 	"sort"
 	"strings"
 	"sync"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -85,14 +87,6 @@ func (s *service) publish(ctx context.Context, topic string, event any) {
 }
 
 func (s *service) Register(ctx context.Context, username, email, password, role string) (*User, error) {
-	existing, err := s.repo.FindByEmail(ctx, email)
-	if err != nil {
-		return nil, err
-	}
-	if existing != nil {
-		return nil, ErrEmailInUse
-	}
-
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, err
@@ -121,11 +115,11 @@ func (s *service) Register(ctx context.Context, username, email, password, role 
 
 func (s *service) Login(ctx context.Context, email, password string) (*User, error) {
 	u, err := s.repo.FindByEmail(ctx, email)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrInvalidCredentials
+	}
 	if err != nil {
 		return nil, err
-	}
-	if u == nil {
-		return nil, ErrInvalidCredentials
 	}
 	if err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password)); err != nil {
 		return nil, ErrInvalidCredentials

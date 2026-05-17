@@ -3,6 +3,7 @@ package user_test
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 
 	"github.com/dungpd/seta/auth-service/internal/user"
@@ -49,6 +50,44 @@ func TestRegister_DuplicateEmail(t *testing.T) {
 	}
 	if !errors.Is(err, user.ErrEmailInUse) {
 		t.Errorf("error = %v, want ErrEmailInUse", err)
+	}
+}
+
+func TestRegister_ConcurrentDuplicate(t *testing.T) {
+	repo := &mockRepo{}
+	svc := user.NewService(repo)
+	ctx := context.Background()
+
+	const n = 4
+	var wg sync.WaitGroup
+	errs := make(chan error, n)
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := svc.Register(ctx, "alice", "same@example.com", "pass1234", "member")
+			errs <- err
+		}()
+	}
+	wg.Wait()
+	close(errs)
+
+	var success, emailInUse int
+	for e := range errs {
+		switch {
+		case e == nil:
+			success++
+		case errors.Is(e, user.ErrEmailInUse):
+			emailInUse++
+		default:
+			t.Errorf("unexpected error: %v", e)
+		}
+	}
+	if success != 1 {
+		t.Errorf("success count = %d, want 1", success)
+	}
+	if emailInUse != n-1 {
+		t.Errorf("ErrEmailInUse count = %d, want %d", emailInUse, n-1)
 	}
 }
 

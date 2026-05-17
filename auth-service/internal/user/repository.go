@@ -6,10 +6,12 @@ import (
 	"time"
 
 	"github.com/dungpd/seta/auth-service/internal/db"
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+const pgUniqueViolation = "23505"
 
 type Repository interface {
 	Create(ctx context.Context, u *User) error
@@ -34,6 +36,10 @@ func (r *repository) Create(ctx context.Context, u *User) error {
 		Role:         u.Role,
 	})
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgUniqueViolation {
+			return ErrEmailInUse
+		}
 		return err
 	}
 
@@ -48,9 +54,6 @@ func (r *repository) Create(ctx context.Context, u *User) error {
 
 func (r *repository) FindByEmail(ctx context.Context, email string) (*User, error) {
 	row, err := r.queries.GetUserByEmail(ctx, email)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, nil
-	}
 	if err != nil {
 		return nil, err
 	}
