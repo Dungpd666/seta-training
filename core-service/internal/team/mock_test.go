@@ -26,13 +26,14 @@ func newMockTeamRepo() *mockTeamRepo {
 	}
 }
 
-func (m *mockTeamRepo) Create(_ context.Context, teamName, createdBy string) (*team.Team, error) {
+func (m *mockTeamRepo) CreateWithManager(_ context.Context, teamName, createdBy string) (*team.Team, error) {
 	t := &team.Team{
 		TeamID:    uuid.NewString(),
 		TeamName:  teamName,
 		CreatedBy: createdBy,
 	}
 	m.teams[t.TeamID] = t
+	m.members[fmt.Sprintf("%s:%s", t.TeamID, createdBy)] = team.RoleManager
 	return t, nil
 }
 

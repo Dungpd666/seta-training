@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/dungpd/seta/core-service/internal/db"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type ProjectionRepository interface {
@@ -12,7 +13,7 @@ type ProjectionRepository interface {
 }
 
 type TeamRepository interface {
-	Create(ctx context.Context, teamName, createdBy string) (*Team, error)
+	CreateWithManager(ctx context.Context, teamName, createdBy string) (*Team, error)
 	AddMember(ctx context.Context, teamID, userID string, role string) error
 	RemoveMember(ctx context.Context, teamID, userID string) error
 	GetMemberRole(ctx context.Context, teamID, userID string) (string, error)
@@ -26,15 +27,16 @@ type projectionRepo struct {
 }
 
 type teamRepo struct {
-	q *db.Queries
+	q    *db.Queries
+	pool *pgxpool.Pool
 }
 
 func NewProjectionRepository(q *db.Queries) ProjectionRepository {
 	return &projectionRepo{q: q}
 }
 
-func NewRepository(q *db.Queries) TeamRepository {
-	return &teamRepo{q: q}
+func NewRepository(q *db.Queries, pool *pgxpool.Pool) TeamRepository {
+	return &teamRepo{q: q, pool: pool}
 }
 
 func (r *projectionRepo) Upsert(ctx context.Context, u UserProjection) error {
@@ -51,14 +53,35 @@ func (r *projectionRepo) SoftDelete(ctx context.Context, userID string) error {
 	return r.q.SoftDeleteUserProjection(ctx, userID)
 }
 
-func (r *teamRepo) Create(ctx context.Context, teamName, createdBy string) (*Team, error) {
-	row, err := r.q.CreateTeam(ctx, db.CreateTeamParams{
+func (r *teamRepo) CreateWithManager(ctx context.Context, teamName, createdBy string) (*Team, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	q := r.q.WithTx(tx)
+
+	row, err := q.CreateTeam(ctx, db.CreateTeamParams{
 		TeamName:  teamName,
 		CreatedBy: createdBy,
 	})
 	if err != nil {
 		return nil, err
 	}
+
+	if err := q.AddTeamMember(ctx, db.AddTeamMemberParams{
+		TeamID: row.TeamID,
+		UserID: createdBy,
+		Role:   RoleManager,
+	}); err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+
 	return &Team{
 		TeamID:    row.TeamID,
 		TeamName:  row.TeamName,

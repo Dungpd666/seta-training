@@ -20,7 +20,7 @@ func initServices(ctx context.Context, cfg *config.Config, dbPool *pgxpool.Pool,
 	StartUserEventConsumer(ctx, cfg.KafkaBrokers, projectionRepo)
 	StartAuditConsumer(ctx, cfg.KafkaBrokers, q)
 
-	teamRepo := team.NewRepository(q)
+	teamRepo := team.NewRepository(q, dbPool)
 	teamSvc := team.NewService(teamRepo, rdb, producer)
 	teamHandler := team.NewHandler(teamSvc)
 

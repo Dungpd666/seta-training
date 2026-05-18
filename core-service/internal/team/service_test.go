@@ -3,10 +3,12 @@ package team_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/dungpd/seta/core-service/internal/team"
+	"github.com/jackc/pgx/v5"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -164,5 +166,69 @@ func TestDemoteFromManager_CannotDemoteCreator(t *testing.T) {
 	err := svc.DemoteFromManager(ctx, result.TeamID, "alice-id", "alice-id")
 	if !errors.Is(err, team.ErrCannotDemoteCreator) {
 		t.Errorf("expected ErrCannotDemoteCreator, got: %v", err)
+	}
+}
+
+// mockTeamRepoFailOnMember simulates CreateWithManager failing after the team
+// row is created but before the manager membership is inserted — the real DB
+// implementation wraps both in a transaction and would roll back, leaving no
+// orphan team. The mock enforces the same invariant by returning an error and
+// not persisting the team.
+type mockTeamRepoFailOnMember struct {
+	teams   map[string]*team.Team
+	members map[string]string
+}
+
+func newMockFailOnMember() *mockTeamRepoFailOnMember {
+	return &mockTeamRepoFailOnMember{
+		teams:   make(map[string]*team.Team),
+		members: make(map[string]string),
+	}
+}
+
+func (m *mockTeamRepoFailOnMember) CreateWithManager(_ context.Context, _, _ string) (*team.Team, error) {
+	return nil, errors.New("simulated db error on AddTeamMember")
+}
+func (m *mockTeamRepoFailOnMember) AddMember(_ context.Context, teamID, userID, role string) error {
+	m.members[fmt.Sprintf("%s:%s", teamID, userID)] = role
+	return nil
+}
+func (m *mockTeamRepoFailOnMember) RemoveMember(_ context.Context, teamID, userID string) error {
+	delete(m.members, fmt.Sprintf("%s:%s", teamID, userID))
+	return nil
+}
+func (m *mockTeamRepoFailOnMember) GetMemberRole(_ context.Context, teamID, userID string) (string, error) {
+	role, ok := m.members[fmt.Sprintf("%s:%s", teamID, userID)]
+	if !ok {
+		return "", pgx.ErrNoRows
+	}
+	return role, nil
+}
+func (m *mockTeamRepoFailOnMember) GetByID(_ context.Context, teamID string) (*team.Team, error) {
+	t, ok := m.teams[teamID]
+	if !ok {
+		return nil, pgx.ErrNoRows
+	}
+	return t, nil
+}
+func (m *mockTeamRepoFailOnMember) GetUserByID(_ context.Context, userID string) (*team.UserProjection, error) {
+	return &team.UserProjection{UserID: userID}, nil
+}
+func (m *mockTeamRepoFailOnMember) ListMembers(_ context.Context, _ string) ([]*team.TeamMember, error) {
+	return nil, nil
+}
+
+func TestCreateTeam_RollbackOnMemberInsertFailure(t *testing.T) {
+	repo := newMockFailOnMember()
+	mr := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	svc := team.NewService(repo, rdb, &mockPublisher{})
+
+	_, err := svc.CreateTeam(context.Background(), "alice-id", "Alpha Team")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if len(repo.teams) != 0 {
+		t.Errorf("expected no orphan teams after rollback, got %d", len(repo.teams))
 	}
 }
