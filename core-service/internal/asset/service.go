@@ -18,6 +18,7 @@ type Service interface {
 	Delete(ctx context.Context, callerID, assetID string) error
 	Share(ctx context.Context, callerID, assetID, targetUserID, accessLevel string) error
 	RevokeShare(ctx context.Context, callerID, assetID, targetUserID string) error
+	List(ctx context.Context, callerID string, page, limit int) ([]*Asset, int64, error)
 }
 
 type service struct {
@@ -139,6 +140,9 @@ func (s *service) Update(ctx context.Context, callerID, assetID, title string, c
 	if err != nil {
 		return nil, err
 	}
+	if existing.Type == AssetTypeFolder && content != nil {
+		return nil, ErrFolderContentNotAllowed
+	}
 	if err := s.requireWriteAccess(ctx, existing, callerID); err != nil {
 		return nil, err
 	}
@@ -151,6 +155,20 @@ func (s *service) Update(ctx context.Context, callerID, assetID, title string, c
 	}
 	s.rdb.Del(ctx, cache.AssetKey(assetID))
 	return updated, nil
+}
+
+func (s *service) requireWriteAccess(ctx context.Context, asset *Asset, callerID string) error {
+	if asset.OwnerID == callerID {
+		return nil
+	}
+	acl, err := s.repo.GetACLEntry(ctx, asset.AssetID, callerID)
+	if err != nil {
+		return err
+	}
+	if acl == nil || acl.AccessLevel != AccessLevelWrite {
+		return ErrForbidden
+	}
+	return nil
 }
 
 func (s *service) Delete(ctx context.Context, callerID, assetID string) error {
@@ -184,20 +202,6 @@ func (s *service) Delete(ctx context.Context, callerID, assetID string) error {
 	return nil
 }
 
-func (s *service) requireWriteAccess(ctx context.Context, asset *Asset, callerID string) error {
-	if asset.OwnerID == callerID {
-		return nil
-	}
-	acl, err := s.repo.GetACLEntry(ctx, asset.AssetID, callerID)
-	if err != nil {
-		return err
-	}
-	if acl == nil || acl.AccessLevel != AccessLevelWrite {
-		return ErrForbidden
-	}
-	return nil
-}
-
 func (s *service) Share(ctx context.Context, callerID, assetID, targetUserID, accessLevel string) error {
 	asset, err := s.repo.GetByID(ctx, assetID)
 	if err != nil {
@@ -213,9 +217,7 @@ func (s *service) Share(ctx context.Context, callerID, assetID, targetUserID, ac
 	if !exists {
 		return ErrTargetUserNotFound
 	}
-	descendants, err := s.applyACLCascade(ctx, assetID, asset.Type, func(id string) error {
-		return s.repo.UpsertACLEntry(ctx, id, targetUserID, accessLevel)
-	})
+	descendants, err := s.repo.UpsertACLWithCascade(ctx, assetID, asset.Type, targetUserID, accessLevel)
 	if err != nil {
 		return err
 	}
@@ -237,9 +239,7 @@ func (s *service) RevokeShare(ctx context.Context, callerID, assetID, targetUser
 	if asset.OwnerID != callerID {
 		return ErrForbidden
 	}
-	descendants, err := s.applyACLCascade(ctx, assetID, asset.Type, func(id string) error {
-		return s.repo.DeleteACLEntry(ctx, id, targetUserID)
-	})
+	descendants, err := s.repo.DeleteACLWithCascade(ctx, assetID, asset.Type, targetUserID)
 	if err != nil {
 		return err
 	}
@@ -248,6 +248,19 @@ func (s *service) RevokeShare(ctx context.Context, callerID, assetID, targetUser
 	}
 	s.rdb.Del(ctx, cache.AssetACLKey(assetID))
 	return nil
+}
+
+func (s *service) List(ctx context.Context, callerID string, page, limit int) ([]*Asset, int64, error) {
+	total, err := s.repo.CountByOwner(ctx, callerID)
+	if err != nil {
+		return nil, 0, err
+	}
+	offset := int32((page - 1) * limit)
+	assets, err := s.repo.List(ctx, callerID, int32(limit), offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	return assets, total, nil
 }
 
 func (s *service) publishEvent(ctx context.Context, eventType, assetID, ownerID string) {
@@ -259,23 +272,4 @@ func (s *service) publishEvent(ctx context.Context, eventType, assetID, ownerID 
 	}); err != nil {
 		log.Warn().Err(err).Str("event", eventType).Msg("failed to publish asset event")
 	}
-}
-
-func (s *service) applyACLCascade(ctx context.Context, assetID, assetType string, apply func(string) error) ([]string, error) {
-	if err := apply(assetID); err != nil {
-		return nil, err
-	}
-	if assetType != AssetTypeFolder {
-		return nil, nil
-	}
-	descendants, err := s.repo.GetDescendantIDs(ctx, assetID)
-	if err != nil {
-		return nil, err
-	}
-	for _, id := range descendants {
-		if err := apply(id); err != nil {
-			return nil, err
-		}
-	}
-	return descendants, nil
 }

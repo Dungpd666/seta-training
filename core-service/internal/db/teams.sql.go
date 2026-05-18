@@ -167,7 +167,7 @@ func (q *Queries) IsManagerOfMember(ctx context.Context, arg IsManagerOfMemberPa
 	return exists, err
 }
 
-const removeTeamMember = `-- name: RemoveTeamMember :exec
+const removeTeamMember = `-- name: RemoveTeamMember :execrows
 DELETE FROM team_members WHERE team_id = $1 AND user_id = $2
 `
 
@@ -176,7 +176,7 @@ type RemoveTeamMemberParams struct {
 	UserID string
 }
 
-func (q *Queries) RemoveTeamMember(ctx context.Context, arg RemoveTeamMemberParams) error {
-	_, err := q.db.Exec(ctx, removeTeamMember, arg.TeamID, arg.UserID)
-	return err
+func (q *Queries) RemoveTeamMember(ctx context.Context, arg RemoveTeamMemberParams) (int64, error) {
+	result, err := q.db.Exec(ctx, removeTeamMember, arg.TeamID, arg.UserID)
+	return result.RowsAffected(), err
 }

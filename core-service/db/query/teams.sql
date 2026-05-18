@@ -12,7 +12,7 @@ VALUES ($1, $2, $3)
 ON CONFLICT (team_id, user_id) DO UPDATE
     SET role = EXCLUDED.role;
 
--- name: RemoveTeamMember :exec
+-- name: RemoveTeamMember :execrows
 DELETE FROM team_members WHERE team_id = $1 AND user_id = $2;
 
 -- name: GetMemberRole :one

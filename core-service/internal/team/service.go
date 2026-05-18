@@ -36,11 +36,8 @@ func NewService(repo TeamRepository, rdb *redis.Client, publisher Publisher) Ser
 }
 
 func (s *service) CreateTeam(ctx context.Context, createdBy, teamName string) (*Team, error) {
-	team, err := s.repo.Create(ctx, teamName, createdBy)
+	team, err := s.repo.CreateWithManager(ctx, teamName, createdBy)
 	if err != nil {
-		return nil, err
-	}
-	if err := s.repo.AddMember(ctx, team.TeamID, createdBy, RoleManager); err != nil {
 		return nil, err
 	}
 	s.publishEvent(ctx, EventTeamCreated, team.TeamID, createdBy)

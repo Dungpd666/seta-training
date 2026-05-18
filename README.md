@@ -57,15 +57,14 @@ go test ./internal/team/... -run TestCreateTeam_CreatorAutoAddedAsManager -v
 
 ## Services
 
-| Service | Port | Responsibility |
-|---|---|---|
+| Service      | Port | Responsibility                                              |
+| ------------ | ---- | ----------------------------------------------------------- |
 | auth-service | 8081 | Registration, login, JWT issuance, user listing, CSV import |
-| core-service | 8082 | Teams, assets (folders & notes), sharing, RBAC |
+| core-service | 8082 | Teams, assets (folders & notes), sharing, RBAC              |
 
 ## Documentation
 
-| File | Purpose |
-|---|---|
-| `docs/GOAL.md` | Project requirements and grading criteria |
-| `docs/tech-stack.md` | Tech stack choices and trade-offs |
-| `docs/ARCHITECTURE.md` | System architecture overview |
+| File                 | Purpose                                   |
+| -------------------- | ----------------------------------------- |
+| `docs/GOAL.md`       | Project requirements and grading criteria |
+| `docs/tech-stack.md` | Tech stack choices and trade-offs         |

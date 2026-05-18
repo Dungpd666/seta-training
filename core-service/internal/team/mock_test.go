@@ -26,13 +26,14 @@ func newMockTeamRepo() *mockTeamRepo {
 	}
 }
 
-func (m *mockTeamRepo) Create(_ context.Context, teamName, createdBy string) (*team.Team, error) {
+func (m *mockTeamRepo) CreateWithManager(_ context.Context, teamName, createdBy string) (*team.Team, error) {
 	t := &team.Team{
 		TeamID:    uuid.NewString(),
 		TeamName:  teamName,
 		CreatedBy: createdBy,
 	}
 	m.teams[t.TeamID] = t
+	m.members[fmt.Sprintf("%s:%s", t.TeamID, createdBy)] = team.RoleManager
 	return t, nil
 }
 
@@ -50,7 +51,11 @@ func (m *mockTeamRepo) AddMember(_ context.Context, teamID, userID, role string)
 }
 
 func (m *mockTeamRepo) RemoveMember(_ context.Context, teamID, userID string) error {
-	delete(m.members, fmt.Sprintf("%s:%s", teamID, userID))
+	key := fmt.Sprintf("%s:%s", teamID, userID)
+	if _, ok := m.members[key]; !ok {
+		return team.ErrNotTeamMember
+	}
+	delete(m.members, key)
 	return nil
 }
 
