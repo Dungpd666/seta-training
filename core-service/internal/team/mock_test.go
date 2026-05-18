@@ -51,7 +51,11 @@ func (m *mockTeamRepo) AddMember(_ context.Context, teamID, userID, role string)
 }
 
 func (m *mockTeamRepo) RemoveMember(_ context.Context, teamID, userID string) error {
-	delete(m.members, fmt.Sprintf("%s:%s", teamID, userID))
+	key := fmt.Sprintf("%s:%s", teamID, userID)
+	if _, ok := m.members[key]; !ok {
+		return team.ErrNotTeamMember
+	}
+	delete(m.members, key)
 	return nil
 }
 

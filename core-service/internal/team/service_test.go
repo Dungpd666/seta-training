@@ -169,6 +169,18 @@ func TestDemoteFromManager_CannotDemoteCreator(t *testing.T) {
 	}
 }
 
+func TestRemoveMember_NonMemberReturnsError(t *testing.T) {
+	svc, _ := newSvc()
+	ctx := context.Background()
+
+	result, _ := svc.CreateTeam(ctx, "alice-id", "Alpha Team")
+
+	err := svc.RemoveMember(ctx, result.TeamID, "alice-id", "nonexistent-user")
+	if !errors.Is(err, team.ErrNotTeamMember) {
+		t.Errorf("expected ErrNotTeamMember, got: %v", err)
+	}
+}
+
 // mockTeamRepoFailOnMember simulates CreateWithManager failing after the team
 // row is created but before the manager membership is inserted — the real DB
 // implementation wraps both in a transaction and would roll back, leaving no

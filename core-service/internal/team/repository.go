@@ -98,10 +98,17 @@ func (r *teamRepo) AddMember(ctx context.Context, teamID, userID string, role st
 }
 
 func (r *teamRepo) RemoveMember(ctx context.Context, teamID, userID string) error {
-	return r.q.RemoveTeamMember(ctx, db.RemoveTeamMemberParams{
+	rows, err := r.q.RemoveTeamMember(ctx, db.RemoveTeamMemberParams{
 		TeamID: teamID,
 		UserID: userID,
 	})
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return ErrNotTeamMember
+	}
+	return nil
 }
 
 func (r *teamRepo) GetMemberRole(ctx context.Context, teamID, userID string) (string, error) {
