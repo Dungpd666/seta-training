@@ -58,8 +58,8 @@ func TestGenerateTokenPair_ClaimsCorrect(t *testing.T) {
 	if claims.Role != "member" {
 		t.Errorf("role = %q, want %q", claims.Role, "member")
 	}
-	if claims.Type != "" {
-		t.Errorf("access token type = %q, want empty", claims.Type)
+	if claims.Type != "access" {
+		t.Errorf("access token type = %q, want %q", claims.Type, "access")
 	}
 
 	refreshClaims, err := svc.ParseToken(refreshToken)
@@ -105,6 +105,29 @@ func TestRotateRefreshToken_HappyPath(t *testing.T) {
 	valid, _ := repo.IsValid(ctx, oldClaims.ID)
 	if valid {
 		t.Error("old refresh token should be revoked after rotation")
+	}
+}
+
+func TestRotateRefreshToken_KeepsRole(t *testing.T) {
+	svc, _ := newAuthSvc(t)
+	ctx := context.Background()
+
+	_, refreshToken, err := svc.GenerateTokenPair(ctx, "user-1", "manager")
+	if err != nil {
+		t.Fatalf("GenerateTokenPair: %v", err)
+	}
+
+	newAccess, _, err := svc.RotateRefreshToken(ctx, refreshToken)
+	if err != nil {
+		t.Fatalf("RotateRefreshToken: %v", err)
+	}
+
+	claims, err := svc.ParseToken(newAccess)
+	if err != nil {
+		t.Fatalf("ParseToken new access: %v", err)
+	}
+	if claims.Role != "manager" {
+		t.Errorf("new access token role = %q, want %q", claims.Role, "manager")
 	}
 }
 
@@ -197,6 +220,40 @@ func TestRevokeSession_RevokesRefreshToken(t *testing.T) {
 	valid, _ := repo.IsValid(ctx, refreshClaims.ID)
 	if valid {
 		t.Error("refresh token should be revoked after logout")
+	}
+}
+
+func TestRevokeSession_RejectsCrossUserPair(t *testing.T) {
+	svc, _ := newAuthSvc(t)
+	ctx := context.Background()
+
+	atA, _, err := svc.GenerateTokenPair(ctx, "user-A", "member")
+	if err != nil {
+		t.Fatalf("GenerateTokenPair A: %v", err)
+	}
+	_, rtB, err := svc.GenerateTokenPair(ctx, "user-B", "member")
+	if err != nil {
+		t.Fatalf("GenerateTokenPair B: %v", err)
+	}
+
+	err = svc.RevokeSession(ctx, atA, rtB)
+	if !errors.Is(err, auth.ErrInvalidToken) {
+		t.Errorf("RevokeSession with mismatched subjects: err = %v, want ErrInvalidToken", err)
+	}
+}
+
+func TestRevokeSession_RejectsAccessTokenAsRefresh(t *testing.T) {
+	svc, _ := newAuthSvc(t)
+	ctx := context.Background()
+
+	at, _, err := svc.GenerateTokenPair(ctx, "user-1", "member")
+	if err != nil {
+		t.Fatalf("GenerateTokenPair: %v", err)
+	}
+
+	err = svc.RevokeSession(ctx, at, at)
+	if !errors.Is(err, auth.ErrInvalidToken) {
+		t.Errorf("RevokeSession with access token as refresh: err = %v, want ErrInvalidToken", err)
 	}
 }
 

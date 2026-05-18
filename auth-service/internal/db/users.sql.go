@@ -9,6 +9,17 @@ import (
 	"context"
 )
 
+const countUsers = `-- name: CountUsers :one
+SELECT COUNT(*) FROM users
+`
+
+func (q *Queries) CountUsers(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countUsers)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (
     username,
@@ -68,13 +79,55 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 	return i, err
 }
 
-const listUsers = `-- name: ListUsers :many
+const listUsersFromStart = `-- name: ListUsersFromStart :many
 SELECT user_id, username, email, password_hash, role, created_at
-FROM users
+FROM users 
+ORDER BY user_id 
+LIMIT $1
 `
 
-func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
-	rows, err := q.db.Query(ctx, listUsers)
+func (q *Queries) ListUsersFromStart(ctx context.Context, limit int32) ([]User, error) {
+	rows, err := q.db.Query(ctx, listUsersFromStart, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []User
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.UserID,
+			&i.Username,
+			&i.Email,
+			&i.PasswordHash,
+			&i.Role,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUsersWithCursor = `-- name: ListUsersWithCursor :many
+SELECT user_id, username, email, password_hash, role, created_at
+FROM users 
+WHERE user_id > $1
+ORDER BY user_id
+LIMIT $2
+`
+
+type ListUsersWithCursorParams struct {
+	UserID string
+	Limit  int32
+}
+
+func (q *Queries) ListUsersWithCursor(ctx context.Context, arg ListUsersWithCursorParams) ([]User, error) {
+	rows, err := q.db.Query(ctx, listUsersWithCursor, arg.UserID, arg.Limit)
 	if err != nil {
 		return nil, err
 	}

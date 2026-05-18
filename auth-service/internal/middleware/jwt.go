@@ -39,6 +39,12 @@ func JWTAuth(v TokenValidator) gin.HandlerFunc {
 			return
 		}
 
+		if claims.Type != "" && claims.Type != auth.AccessTokenType {
+			c.Abort()
+			response.Error(c, http.StatusUnauthorized, response.ErrUnauthorized, "invalid token type")
+			return
+		}
+
 		blacklisted, err := v.IsBlacklisted(c.Request.Context(), claims.ID)
 		if err != nil || blacklisted {
 			c.Abort()

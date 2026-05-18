@@ -141,8 +141,8 @@ func (h *Handler) JWKS(c *gin.Context) {
 	}
 	e := base64.RawURLEncoding.EncodeToString(eBuf[i:])
 
-	response.Success(c, gin.H{"keys": []gin.H{{
+	c.JSON(http.StatusOK, gin.H{"keys": []gin.H{{
 		"kty": "RSA", "use": "sig", "alg": "RS256",
-		"kid": "auth-service-key-1", "n": n, "e": e,
+		"kid": KeyID, "n": n, "e": e,
 	}}})
 }

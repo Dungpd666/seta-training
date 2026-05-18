@@ -3,12 +3,14 @@ package user
 import (
 	"context"
 	"encoding/csv"
+	"errors"
 	"fmt"
 	"io"
 	"sort"
 	"strings"
 	"sync"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -19,16 +21,10 @@ type EventPublisher interface {
 	Publish(ctx context.Context, topic string, payload any) error
 }
 
-type Repository interface {
-	Create(ctx context.Context, u *User) error
-	FindByEmail(ctx context.Context, email string) (*User, error)
-	FindAll(ctx context.Context) ([]User, error)
-}
-
 type Service interface {
 	Register(ctx context.Context, username, email, password, role string) (*User, error)
 	Login(ctx context.Context, email, password string) (*User, error)
-	ListAll(ctx context.Context) ([]User, error)
+	ListPage(ctx context.Context, cursor string, limit int32) ([]User, int64, error)
 	ImportFromCSV(ctx context.Context, r io.Reader, workers int) (*ImportResult, error)
 }
 
@@ -90,19 +86,7 @@ func (s *service) publish(ctx context.Context, topic string, event any) {
 	}
 }
 
-func (s *service) ListAll(ctx context.Context) ([]User, error) {
-	return s.repo.FindAll(ctx)
-}
-
 func (s *service) Register(ctx context.Context, username, email, password, role string) (*User, error) {
-	existing, err := s.repo.FindByEmail(ctx, email)
-	if err != nil {
-		return nil, err
-	}
-	if existing != nil {
-		return nil, ErrEmailInUse
-	}
-
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, err
@@ -131,16 +115,28 @@ func (s *service) Register(ctx context.Context, username, email, password, role 
 
 func (s *service) Login(ctx context.Context, email, password string) (*User, error) {
 	u, err := s.repo.FindByEmail(ctx, email)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrInvalidCredentials
+	}
 	if err != nil {
 		return nil, err
-	}
-	if u == nil {
-		return nil, ErrInvalidCredentials
 	}
 	if err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password)); err != nil {
 		return nil, ErrInvalidCredentials
 	}
 	return u, nil
+}
+
+func (s *service) ListPage(ctx context.Context, cursor string, limit int32) ([]User, int64, error) {
+	total, err := s.repo.Count(ctx)
+	if err != nil {
+		return nil, 0, err
+	}
+	users, err := s.repo.FindPage(ctx, cursor, limit)
+	if err != nil {
+		return nil, 0, err
+	}
+	return users, total, nil
 }
 
 func (s *service) ImportFromCSV(ctx context.Context, r io.Reader, workers int) (*ImportResult, error) {
