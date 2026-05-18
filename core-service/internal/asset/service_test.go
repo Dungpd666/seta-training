@@ -5,12 +5,16 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/dungpd/seta/core-service/internal/asset"
+	"github.com/redis/go-redis/v9"
 )
 
 func newSvc() (asset.Service, *mockAssetRepo) {
 	repo := newMockAssetRepo()
-	return asset.NewService(repo), repo
+	mr, _ := miniredis.Run()
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	return asset.NewService(repo, rdb, &mockPublisher{}), repo
 }
 
 func TestShare_FolderCascadesToChildNotes(t *testing.T) {
@@ -39,6 +43,19 @@ func TestShare_FolderCascadesToChildNotes(t *testing.T) {
 		if !seen[id] {
 			t.Errorf("missing UpsertACLEntry for assetID %q", id)
 		}
+	}
+}
+
+func TestUpdate_FolderCannotSetContent(t *testing.T) {
+	svc, repo := newSvc()
+	ctx := context.Background()
+
+	repo.assets["folder-1"] = &asset.Asset{AssetID: "folder-1", OwnerID: "alice", Type: asset.AssetTypeFolder, Title: "My Folder"}
+
+	content := "oops"
+	_, err := svc.Update(ctx, "alice", "folder-1", "My Folder", &content)
+	if !errors.Is(err, asset.ErrFolderContentNotAllowed) {
+		t.Errorf("expected ErrFolderContentNotAllowed, got: %v", err)
 	}
 }
 

@@ -21,7 +21,9 @@ func New(jwks *middleware.JWKSClient, rdb *redis.Client, teamHandler *team.Handl
 
 	v1 := r.Group("/v1", middleware.JWTAuth(jwks, rdb))
 	{
+		v1.GET("/assets", assetHandler.List)
 		v1.GET("/assets/:id", assetHandler.GetByID)
+		v1.GET("/teams/:id/members", teamHandler.GetMembers)
 		v1.POST("/assets", assetHandler.Create)
 		v1.POST("/teams", teamHandler.CreateTeam)
 		v1.POST("/teams/:id/members", teamHandler.AddMember)

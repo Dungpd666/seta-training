@@ -2,9 +2,14 @@ package team
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"time"
 
+	"github.com/dungpd/seta/core-service/internal/cache"
 	"github.com/jackc/pgx/v5"
+	"github.com/redis/go-redis/v9"
+	"github.com/rs/zerolog/log"
 )
 
 type Service interface {
@@ -13,24 +18,29 @@ type Service interface {
 	RemoveMember(ctx context.Context, teamID, callerID, targetUserID string) error
 	PromoteToManager(ctx context.Context, teamID, callerID, targetUserID string) error
 	DemoteFromManager(ctx context.Context, teamID, callerID, targetUserID string) error
+	GetMembers(ctx context.Context, teamID, callerID string) ([]*TeamMember, error)
 }
 
 type service struct {
-	repo TeamRepository
+	repo      TeamRepository
+	rdb       *redis.Client
+	publisher Publisher
 }
 
-func NewService(repo TeamRepository) Service {
-	return &service{repo: repo}
+func NewService(repo TeamRepository, rdb *redis.Client, publisher Publisher) Service {
+	return &service{
+		repo:      repo,
+		rdb:       rdb,
+		publisher: publisher,
+	}
 }
 
 func (s *service) CreateTeam(ctx context.Context, createdBy, teamName string) (*Team, error) {
-	team, err := s.repo.Create(ctx, teamName, createdBy)
+	team, err := s.repo.CreateWithManager(ctx, teamName, createdBy)
 	if err != nil {
 		return nil, err
 	}
-	if err := s.repo.AddMember(ctx, team.TeamID, createdBy, RoleManager); err != nil {
-		return nil, err
-	}
+	s.publishEvent(ctx, EventTeamCreated, team.TeamID, createdBy)
 	return team, nil
 }
 
@@ -48,14 +58,24 @@ func (s *service) AddMember(ctx context.Context, teamID, callerID, targetUserID 
 	} else if err != nil {
 		return err
 	}
-	return s.repo.AddMember(ctx, teamID, targetUserID, RoleMember)
+	if err := s.repo.AddMember(ctx, teamID, targetUserID, RoleMember); err != nil {
+		return err
+	}
+	s.publishEvent(ctx, EventMemberAdded, teamID, targetUserID)
+	s.rdb.Del(ctx, cache.TeamMembersKey(teamID))
+	return nil
 }
 
 func (s *service) RemoveMember(ctx context.Context, teamID, callerID, targetUserID string) error {
 	if err := s.requireTeamManager(ctx, teamID, callerID); err != nil {
 		return err
 	}
-	return s.repo.RemoveMember(ctx, teamID, targetUserID)
+	if err := s.repo.RemoveMember(ctx, teamID, targetUserID); err != nil {
+		return err
+	}
+	s.publishEvent(ctx, EventMemberRemoved, teamID, targetUserID)
+	s.rdb.Del(ctx, cache.TeamMembersKey(teamID))
+	return nil
 }
 
 func (s *service) PromoteToManager(ctx context.Context, teamID, callerID, targetUserID string) error {
@@ -67,7 +87,12 @@ func (s *service) PromoteToManager(ctx context.Context, teamID, callerID, target
 	} else if err != nil {
 		return err
 	}
-	return s.repo.AddMember(ctx, teamID, targetUserID, RoleManager)
+	if err := s.repo.AddMember(ctx, teamID, targetUserID, RoleManager); err != nil {
+		return err
+	}
+	s.publishEvent(ctx, EventManagerAdded, teamID, targetUserID)
+	s.rdb.Del(ctx, cache.TeamMembersKey(teamID))
+	return nil
 }
 
 func (s *service) DemoteFromManager(ctx context.Context, teamID, callerID, targetUserID string) error {
@@ -87,7 +112,56 @@ func (s *service) DemoteFromManager(ctx context.Context, teamID, callerID, targe
 	if role != RoleManager {
 		return ErrNotTeamManager
 	}
-	return s.repo.AddMember(ctx, teamID, targetUserID, RoleMember)
+	if err := s.repo.AddMember(ctx, teamID, targetUserID, RoleMember); err != nil {
+		return err
+	}
+	s.publishEvent(ctx, EventManagerRemoved, teamID, targetUserID)
+	s.rdb.Del(ctx, cache.TeamMembersKey(teamID))
+	return nil
+}
+
+func (s *service) GetMembers(ctx context.Context, teamID, callerID string) ([]*TeamMember, error) {
+	_, err := s.repo.GetMemberRole(ctx, teamID, callerID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotTeamMember
+		}
+		return nil, err
+	}
+
+	cacheKey := cache.TeamMembersKey(teamID)
+
+	cached, err := s.rdb.Get(ctx, cacheKey).Result()
+	if err == nil {
+		var members []*TeamMember
+		if err := json.Unmarshal([]byte(cached), &members); err == nil {
+			return members, nil
+		}
+	}
+
+	members, err := s.repo.ListMembers(ctx, teamID)
+	if err != nil {
+		return nil, err
+	}
+
+	data, err := json.Marshal(members)
+	if err != nil {
+		log.Warn().Err(err).Str("team_id", teamID).Msg("failed to marshal team members for cache")
+	} else {
+		s.rdb.Set(ctx, cacheKey, data, 5*time.Minute)
+	}
+
+	return members, nil
+}
+
+func (s *service) publishEvent(ctx context.Context, evt, teamID, userID string) {
+	if err := s.publisher.Publish(ctx, TopicTeamActivity, TeamEvent{
+		Event:  evt,
+		TeamID: teamID,
+		UserID: userID,
+	}); err != nil {
+		log.Error().Err(err).Str("event", evt).Str("team_id", teamID).Msg("failed to publish team event")
+	}
 }
 
 func (s *service) mustGetTeam(ctx context.Context, teamID string) (*Team, error) {

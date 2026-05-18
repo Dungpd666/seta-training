@@ -20,3 +20,6 @@ WITH RECURSIVE descendants AS (
     WHERE d.depth < 20
 )
 SELECT asset_id FROM descendants;
+
+-- name: ListAssetACL :many
+SELECT asset_id, user_id, access_level FROM asset_acl WHERE asset_id = $1;

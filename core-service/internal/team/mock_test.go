@@ -3,11 +3,16 @@ package team_test
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/dungpd/seta/core-service/internal/team"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
+
+type mockPublisher struct{}
+
+func (m *mockPublisher) Publish(_ context.Context, _ string, _ any) error { return nil }
 
 type mockTeamRepo struct {
 	teams   map[string]*team.Team
@@ -21,13 +26,14 @@ func newMockTeamRepo() *mockTeamRepo {
 	}
 }
 
-func (m *mockTeamRepo) Create(_ context.Context, teamName, createdBy string) (*team.Team, error) {
+func (m *mockTeamRepo) CreateWithManager(_ context.Context, teamName, createdBy string) (*team.Team, error) {
 	t := &team.Team{
 		TeamID:    uuid.NewString(),
 		TeamName:  teamName,
 		CreatedBy: createdBy,
 	}
 	m.teams[t.TeamID] = t
+	m.members[fmt.Sprintf("%s:%s", t.TeamID, createdBy)] = team.RoleManager
 	return t, nil
 }
 
@@ -45,7 +51,11 @@ func (m *mockTeamRepo) AddMember(_ context.Context, teamID, userID, role string)
 }
 
 func (m *mockTeamRepo) RemoveMember(_ context.Context, teamID, userID string) error {
-	delete(m.members, fmt.Sprintf("%s:%s", teamID, userID))
+	key := fmt.Sprintf("%s:%s", teamID, userID)
+	if _, ok := m.members[key]; !ok {
+		return team.ErrNotTeamMember
+	}
+	delete(m.members, key)
 	return nil
 }
 
@@ -59,4 +69,15 @@ func (m *mockTeamRepo) GetMemberRole(_ context.Context, teamID, userID string) (
 
 func (m *mockTeamRepo) GetUserByID(_ context.Context, userID string) (*team.UserProjection, error) {
 	return &team.UserProjection{UserID: userID}, nil
+}
+
+func (m *mockTeamRepo) ListMembers(_ context.Context, teamID string) ([]*team.TeamMember, error) {
+	prefix := teamID + ":"
+	var members []*team.TeamMember
+	for key, role := range m.members {
+		if strings.HasPrefix(key, prefix) {
+			members = append(members, &team.TeamMember{UserID: key[len(prefix):], Role: role})
+		}
+	}
+	return members, nil
 }

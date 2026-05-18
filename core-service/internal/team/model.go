@@ -1,6 +1,9 @@
 package team
 
-import "errors"
+import (
+	"context"
+	"errors"
+)
 
 var (
 	ErrNotTeamManager      = errors.New("user is not a team manager")
@@ -17,10 +20,17 @@ const (
 	RoleMember  = "member"
 )
 
+const TopicTeamActivity = "team.activity"
+
 const (
-	EventUserCreated = "USER_CREATED"
-	EventUserUpdated = "USER_UPDATED"
-	EventUserDeleted = "USER_DELETED"
+	EventUserCreated    = "USER_CREATED"
+	EventUserUpdated    = "USER_UPDATED"
+	EventUserDeleted    = "USER_DELETED"
+	EventTeamCreated    = "TEAM_CREATED"
+	EventMemberAdded    = "MEMBER_ADDED"
+	EventMemberRemoved  = "MEMBER_REMOVED"
+	EventManagerAdded   = "MANAGER_ADDED"
+	EventManagerRemoved = "MANAGER_REMOVED"
 )
 
 type UserEvent struct {
@@ -42,4 +52,33 @@ type Team struct {
 	TeamID    string `json:"team_id"`
 	TeamName  string `json:"team_name"`
 	CreatedBy string `json:"created_by"`
+}
+
+type TeamEvent struct {
+	Event  string `json:"event"`
+	TeamID string `json:"team_id"`
+	UserID string `json:"user_id,omitempty"`
+}
+
+type CreateTeamRequest struct {
+	TeamName string `json:"team_name" binding:"required"`
+}
+
+type AddMemberRequest struct {
+	UserID string `json:"user_id" binding:"required"`
+}
+
+type AddManagerRequest struct {
+	UserID string `json:"user_id" binding:"required"`
+}
+
+type Publisher interface {
+	Publish(ctx context.Context, topic string, payload any) error
+}
+
+type TeamMember struct {
+	UserID   string `json:"user_id"`
+	Role     string `json:"role"`
+	UserName string `json:"username"`
+	Email    string `json:"email"`
 }

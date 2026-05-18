@@ -36,9 +36,7 @@ func writeTeamErr(c *gin.Context, err error) bool {
 }
 
 func (h *Handler) CreateTeam(c *gin.Context) {
-	var body struct {
-		TeamName string `json:"team_name" binding:"required"`
-	}
+	var body CreateTeamRequest
 	if err := c.ShouldBindJSON(&body); err != nil {
 		response.Error(c, http.StatusBadRequest, response.ErrBadRequest, "team_name is required")
 		return
@@ -70,9 +68,7 @@ func (h *Handler) AddMember(c *gin.Context) {
 		return
 	}
 
-	var body struct {
-		UserID string `json:"user_id" binding:"required"`
-	}
+	var body AddMemberRequest
 	if err := c.ShouldBindJSON(&body); err != nil {
 		response.Error(c, http.StatusBadRequest, response.ErrBadRequest, "user_id is required")
 		return
@@ -109,9 +105,7 @@ func (h *Handler) AddManager(c *gin.Context) {
 		return
 	}
 
-	var body struct {
-		UserID string `json:"user_id" binding:"required"`
-	}
+	var body AddManagerRequest
 	if err := c.ShouldBindJSON(&body); err != nil {
 		response.Error(c, http.StatusBadRequest, response.ErrBadRequest, "user_id is required")
 		return
@@ -138,4 +132,19 @@ func (h *Handler) RemoveManager(c *gin.Context) {
 		return
 	}
 	c.Status(http.StatusNoContent)
+}
+
+func (h *Handler) GetMembers(c *gin.Context) {
+	teamID := c.Param("id")
+	callerID, ok := middleware.CallerID(c)
+	if !ok {
+		response.Error(c, http.StatusUnauthorized, response.ErrUnauthorized, "missing caller")
+		return
+	}
+
+	members, err := h.svc.GetMembers(c.Request.Context(), teamID, callerID)
+	if writeTeamErr(c, err) {
+		return
+	}
+	response.Success(c, members)
 }

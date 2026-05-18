@@ -2,6 +2,17 @@ package response
 
 import "github.com/gin-gonic/gin"
 
+type PaginationMeta struct {
+	Total      int64  `json:"total"`
+	Page       int    `json:"page"`
+	Limit      int    `json:"limit"`
+	NextCursor string `json:"next_cursor"`
+}
+
+func Paginated(c *gin.Context, data any, meta PaginationMeta) {
+	c.JSON(200, gin.H{"data": data, "meta": meta})
+}
+
 func Success(c *gin.Context, data any) {
 	SuccessWithStatus(c, 200, data)
 }

@@ -12,7 +12,7 @@ VALUES ($1, $2, $3)
 ON CONFLICT (team_id, user_id) DO UPDATE
     SET role = EXCLUDED.role;
 
--- name: RemoveTeamMember :exec
+-- name: RemoveTeamMember :execrows
 DELETE FROM team_members WHERE team_id = $1 AND user_id = $2;
 
 -- name: GetMemberRole :one
@@ -34,3 +34,11 @@ SELECT EXISTS (
     AND tm_member.user_id = sqlc.arg(member_id)
     AND up.deleted_at IS NULL
 );
+
+-- name: GetTeamMembers :many
+SELECT tm.user_id, tm.role, up.username, up.email 
+FROM team_members tm
+JOIN users_projection up ON up.user_id = tm.user_id AND up.deleted_at IS NULL
+WHERE tm.team_id = $1
+ORDER BY tm.role, up.username; 
+

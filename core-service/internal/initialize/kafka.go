@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	topicUserEvents    = "user.events"
+	topicUserEvents     = "user.events"
 	groupUserProjection = "core-user-projection"
 )
 

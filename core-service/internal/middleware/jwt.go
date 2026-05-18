@@ -5,25 +5,29 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math/big"
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/dungpd/seta/core-service/internal/response"
 	"github.com/gin-gonic/gin"
-	"github.com/rs/zerolog/log"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/redis/go-redis/v9"
+	"github.com/rs/zerolog/log"
 )
 
 const (
-	CtxUserID = "user_id"
-	CtxRole   = "role"
+	CtxUserID       = "user_id"
+	CtxRole         = "role"
+	accessTokenType = "access"
 )
 
 type Claims struct {
 	Role string `json:"role"`
+	Type string `json:"typ,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -33,10 +37,17 @@ type JWKSClient struct {
 	keys     map[string]*rsa.PublicKey
 	issuer   string
 	audience string
+	http     *http.Client
 }
 
 func NewJWKSClient(jwksURL, issuer, audience string) *JWKSClient {
-	return &JWKSClient{url: jwksURL, keys: make(map[string]*rsa.PublicKey), issuer: issuer, audience: audience}
+	return &JWKSClient{
+		url:      jwksURL,
+		keys:     make(map[string]*rsa.PublicKey),
+		issuer:   issuer,
+		audience: audience,
+		http:     &http.Client{Timeout: 5 * time.Second},
+	}
 }
 
 func (c *JWKSClient) GetKey(kid string) (*rsa.PublicKey, error) {
@@ -51,11 +62,15 @@ func (c *JWKSClient) GetKey(kid string) (*rsa.PublicKey, error) {
 }
 
 func (c *JWKSClient) refresh(kid string) (*rsa.PublicKey, error) {
-	resp, err := http.Get(c.url)
+	resp, err := c.http.Get(c.url)
 	if err != nil {
 		return nil, fmt.Errorf("fetch jwks: %w", err)
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("jwks endpoint returned status %d", resp.StatusCode)
+	}
 
 	var jwks struct {
 		Keys []struct {
@@ -64,7 +79,7 @@ func (c *JWKSClient) refresh(kid string) (*rsa.PublicKey, error) {
 			E   string `json:"e"`
 		} `json:"keys"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&jwks); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&jwks); err != nil {
 		return nil, fmt.Errorf("decode jwks: %w", err)
 	}
 
@@ -130,6 +145,12 @@ func JWTAuth(jwks *JWKSClient, rdb *redis.Client) gin.HandlerFunc {
 			return
 		}
 
+		if claims.Type != "" && claims.Type != accessTokenType {
+			c.Abort()
+			response.Error(c, http.StatusUnauthorized, response.ErrUnauthorized, "invalid token type")
+			return
+		}
+
 		blacklisted, err := rdb.Exists(c.Request.Context(), "jwt:blacklist:"+claims.ID).Result()
 		if err != nil {
 			log.Error().Err(err).Msg("redis blacklist check failed")
@@ -144,4 +165,3 @@ func JWTAuth(jwks *JWKSClient, rdb *redis.Client) gin.HandlerFunc {
 		c.Next()
 	}
 }
-

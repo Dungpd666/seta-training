@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/dungpd/seta/core-service/internal/db"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type ProjectionRepository interface {
@@ -12,12 +13,13 @@ type ProjectionRepository interface {
 }
 
 type TeamRepository interface {
-	Create(ctx context.Context, teamName, createdBy string) (*Team, error)
+	CreateWithManager(ctx context.Context, teamName, createdBy string) (*Team, error)
 	AddMember(ctx context.Context, teamID, userID string, role string) error
 	RemoveMember(ctx context.Context, teamID, userID string) error
 	GetMemberRole(ctx context.Context, teamID, userID string) (string, error)
 	GetByID(ctx context.Context, teamID string) (*Team, error)
 	GetUserByID(ctx context.Context, userID string) (*UserProjection, error)
+	ListMembers(ctx context.Context, teamID string) ([]*TeamMember, error)
 }
 
 type projectionRepo struct {
@@ -25,15 +27,16 @@ type projectionRepo struct {
 }
 
 type teamRepo struct {
-	q *db.Queries
+	q    *db.Queries
+	pool *pgxpool.Pool
 }
 
 func NewProjectionRepository(q *db.Queries) ProjectionRepository {
 	return &projectionRepo{q: q}
 }
 
-func NewRepository(q *db.Queries) TeamRepository {
-	return &teamRepo{q: q}
+func NewRepository(q *db.Queries, pool *pgxpool.Pool) TeamRepository {
+	return &teamRepo{q: q, pool: pool}
 }
 
 func (r *projectionRepo) Upsert(ctx context.Context, u UserProjection) error {
@@ -50,14 +53,35 @@ func (r *projectionRepo) SoftDelete(ctx context.Context, userID string) error {
 	return r.q.SoftDeleteUserProjection(ctx, userID)
 }
 
-func (r *teamRepo) Create(ctx context.Context, teamName, createdBy string) (*Team, error) {
-	row, err := r.q.CreateTeam(ctx, db.CreateTeamParams{
+func (r *teamRepo) CreateWithManager(ctx context.Context, teamName, createdBy string) (*Team, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	q := r.q.WithTx(tx)
+
+	row, err := q.CreateTeam(ctx, db.CreateTeamParams{
 		TeamName:  teamName,
 		CreatedBy: createdBy,
 	})
 	if err != nil {
 		return nil, err
 	}
+
+	if err := q.AddTeamMember(ctx, db.AddTeamMemberParams{
+		TeamID: row.TeamID,
+		UserID: createdBy,
+		Role:   RoleManager,
+	}); err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+
 	return &Team{
 		TeamID:    row.TeamID,
 		TeamName:  row.TeamName,
@@ -74,10 +98,17 @@ func (r *teamRepo) AddMember(ctx context.Context, teamID, userID string, role st
 }
 
 func (r *teamRepo) RemoveMember(ctx context.Context, teamID, userID string) error {
-	return r.q.RemoveTeamMember(ctx, db.RemoveTeamMemberParams{
+	rows, err := r.q.RemoveTeamMember(ctx, db.RemoveTeamMemberParams{
 		TeamID: teamID,
 		UserID: userID,
 	})
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return ErrNotTeamMember
+	}
+	return nil
 }
 
 func (r *teamRepo) GetMemberRole(ctx context.Context, teamID, userID string) (string, error) {
@@ -110,4 +141,22 @@ func (r *teamRepo) GetUserByID(ctx context.Context, userID string) (*UserProject
 		Email:    row.Email,
 		Role:     row.Role,
 	}, nil
+}
+
+func (r *teamRepo) ListMembers(ctx context.Context, teamID string) ([]*TeamMember, error) {
+	dbMembers, err := r.q.GetTeamMembers(ctx, teamID)
+	if err != nil {
+		return nil, err
+	}
+
+	members := make([]*TeamMember, len(dbMembers))
+	for i, m := range dbMembers {
+		members[i] = &TeamMember{
+			UserID:   m.UserID,
+			Role:     m.Role,
+			UserName: m.Username,
+			Email:    m.Email,
+		}
+	}
+	return members, nil
 }
