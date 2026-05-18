@@ -140,6 +140,9 @@ func (s *service) Update(ctx context.Context, callerID, assetID, title string, c
 	if err != nil {
 		return nil, err
 	}
+	if existing.Type == AssetTypeFolder && content != nil {
+		return nil, ErrFolderContentNotAllowed
+	}
 	if err := s.requireWriteAccess(ctx, existing, callerID); err != nil {
 		return nil, err
 	}
@@ -214,9 +217,7 @@ func (s *service) Share(ctx context.Context, callerID, assetID, targetUserID, ac
 	if !exists {
 		return ErrTargetUserNotFound
 	}
-	descendants, err := s.applyACLCascade(ctx, assetID, asset.Type, func(id string) error {
-		return s.repo.UpsertACLEntry(ctx, id, targetUserID, accessLevel)
-	})
+	descendants, err := s.repo.UpsertACLWithCascade(ctx, assetID, asset.Type, targetUserID, accessLevel)
 	if err != nil {
 		return err
 	}
@@ -238,9 +239,7 @@ func (s *service) RevokeShare(ctx context.Context, callerID, assetID, targetUser
 	if asset.OwnerID != callerID {
 		return ErrForbidden
 	}
-	descendants, err := s.applyACLCascade(ctx, assetID, asset.Type, func(id string) error {
-		return s.repo.DeleteACLEntry(ctx, id, targetUserID)
-	})
+	descendants, err := s.repo.DeleteACLWithCascade(ctx, assetID, asset.Type, targetUserID)
 	if err != nil {
 		return err
 	}
@@ -249,25 +248,6 @@ func (s *service) RevokeShare(ctx context.Context, callerID, assetID, targetUser
 	}
 	s.rdb.Del(ctx, cache.AssetACLKey(assetID))
 	return nil
-}
-
-func (s *service) applyACLCascade(ctx context.Context, assetID, assetType string, apply func(string) error) ([]string, error) {
-	if err := apply(assetID); err != nil {
-		return nil, err
-	}
-	if assetType != AssetTypeFolder {
-		return nil, nil
-	}
-	descendants, err := s.repo.GetDescendantIDs(ctx, assetID)
-	if err != nil {
-		return nil, err
-	}
-	for _, id := range descendants {
-		if err := apply(id); err != nil {
-			return nil, err
-		}
-	}
-	return descendants, nil
 }
 
 func (s *service) List(ctx context.Context, callerID string, page, limit int) ([]*Asset, int64, error) {
