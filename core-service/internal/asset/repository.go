@@ -7,6 +7,7 @@ import (
 	"github.com/dungpd/seta/core-service/internal/db"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type Repository interface {
@@ -18,6 +19,8 @@ type Repository interface {
 	ListACLByAsset(ctx context.Context, assetID string) ([]*AssetACL, error)
 	UpsertACLEntry(ctx context.Context, assetID, userID, accessLevel string) error
 	DeleteACLEntry(ctx context.Context, assetID, userID string) error
+	UpsertACLWithCascade(ctx context.Context, assetID, assetType, userID, accessLevel string) ([]string, error)
+	DeleteACLWithCascade(ctx context.Context, assetID, assetType, userID string) ([]string, error)
 	GetDescendantIDs(ctx context.Context, assetID string) ([]string, error)
 	IsManagerOfOwner(ctx context.Context, callerID, ownerID string) (bool, error)
 	UserExists(ctx context.Context, userID string) (bool, error)
@@ -26,11 +29,12 @@ type Repository interface {
 }
 
 type repo struct {
-	q *db.Queries
+	q    *db.Queries
+	pool *pgxpool.Pool
 }
 
-func NewRepository(q *db.Queries) Repository {
-	return &repo{q: q}
+func NewRepository(q *db.Queries, pool *pgxpool.Pool) Repository {
+	return &repo{q: q, pool: pool}
 }
 
 func (r *repo) Create(ctx context.Context, ownerID string, parentID *string, assetType, title string, content *string) (*Asset, error) {
@@ -131,6 +135,78 @@ func (r *repo) DeleteACLEntry(ctx context.Context, assetID, userID string) error
 		AssetID: assetID,
 		UserID:  userID,
 	})
+}
+
+func (r *repo) UpsertACLWithCascade(ctx context.Context, assetID, assetType, userID, accessLevel string) ([]string, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	q := r.q.WithTx(tx)
+
+	if err := q.UpsertAssetACL(ctx, db.UpsertAssetACLParams{
+		AssetID: assetID, UserID: userID, AccessLevel: accessLevel,
+	}); err != nil {
+		return nil, err
+	}
+
+	var descendants []string
+	if assetType == AssetTypeFolder {
+		descendants, err = q.GetDescendantIDs(ctx, pgtype.Text{String: assetID, Valid: true})
+		if err != nil {
+			return nil, err
+		}
+		for _, id := range descendants {
+			if err := q.UpsertAssetACL(ctx, db.UpsertAssetACLParams{
+				AssetID: id, UserID: userID, AccessLevel: accessLevel,
+			}); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return descendants, nil
+}
+
+func (r *repo) DeleteACLWithCascade(ctx context.Context, assetID, assetType, userID string) ([]string, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	q := r.q.WithTx(tx)
+
+	if err := q.DeleteAssetACLEntry(ctx, db.DeleteAssetACLEntryParams{
+		AssetID: assetID, UserID: userID,
+	}); err != nil {
+		return nil, err
+	}
+
+	var descendants []string
+	if assetType == AssetTypeFolder {
+		descendants, err = q.GetDescendantIDs(ctx, pgtype.Text{String: assetID, Valid: true})
+		if err != nil {
+			return nil, err
+		}
+		for _, id := range descendants {
+			if err := q.DeleteAssetACLEntry(ctx, db.DeleteAssetACLEntryParams{
+				AssetID: id, UserID: userID,
+			}); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return descendants, nil
 }
 
 func (r *repo) GetDescendantIDs(ctx context.Context, assetID string) ([]string, error) {

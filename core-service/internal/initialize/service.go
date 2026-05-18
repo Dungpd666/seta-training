@@ -24,7 +24,7 @@ func initServices(ctx context.Context, cfg *config.Config, dbPool *pgxpool.Pool,
 	teamSvc := team.NewService(teamRepo, rdb, producer)
 	teamHandler := team.NewHandler(teamSvc)
 
-	assetRepo := asset.NewRepository(q)
+	assetRepo := asset.NewRepository(q, dbPool)
 	assetSvc := asset.NewService(assetRepo, rdb, producer)
 	assetHandler := asset.NewHandler(assetSvc)
 
