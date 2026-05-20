@@ -62,7 +62,7 @@ func (s *service) AddMember(ctx context.Context, teamID, callerID, targetUserID 
 		return err
 	}
 	s.publishEvent(ctx, EventMemberAdded, teamID, targetUserID)
-	s.rdb.Del(ctx, cache.TeamMembersKey(teamID))
+	s.invalidateTeamCache(ctx, teamID)
 	return nil
 }
 
@@ -74,7 +74,7 @@ func (s *service) RemoveMember(ctx context.Context, teamID, callerID, targetUser
 		return err
 	}
 	s.publishEvent(ctx, EventMemberRemoved, teamID, targetUserID)
-	s.rdb.Del(ctx, cache.TeamMembersKey(teamID))
+	s.invalidateTeamCache(ctx, teamID)
 	return nil
 }
 
@@ -91,7 +91,7 @@ func (s *service) PromoteToManager(ctx context.Context, teamID, callerID, target
 		return err
 	}
 	s.publishEvent(ctx, EventManagerAdded, teamID, targetUserID)
-	s.rdb.Del(ctx, cache.TeamMembersKey(teamID))
+	s.invalidateTeamCache(ctx, teamID)
 	return nil
 }
 
@@ -116,8 +116,14 @@ func (s *service) DemoteFromManager(ctx context.Context, teamID, callerID, targe
 		return err
 	}
 	s.publishEvent(ctx, EventManagerRemoved, teamID, targetUserID)
-	s.rdb.Del(ctx, cache.TeamMembersKey(teamID))
+	s.invalidateTeamCache(ctx, teamID)
 	return nil
+}
+
+func (s *service) invalidateTeamCache(ctx context.Context, teamID string) {
+	if err := s.rdb.Del(ctx, cache.TeamMembersKey(teamID)).Err(); err != nil {
+		log.Warn().Err(err).Str("team_id", teamID).Msg("cache invalidation failed")
+	}
 }
 
 func (s *service) GetMembers(ctx context.Context, teamID, callerID string) ([]*TeamMember, error) {

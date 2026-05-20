@@ -12,15 +12,16 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-func newSvc() (team.Service, *mockTeamRepo) {
+func newSvc(t *testing.T) (team.Service, *mockTeamRepo) {
+	t.Helper()
 	repo := newMockTeamRepo()
-	mr, _ := miniredis.Run()
+	mr := miniredis.RunT(t)
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	return team.NewService(repo, rdb, &mockPublisher{}), repo
 }
 
 func TestCreateTeam_CreatorAutoAddedAsManager(t *testing.T) {
-	svc, repo := newSvc()
+	svc, repo := newSvc(t)
 	ctx := context.Background()
 
 	result, err := svc.CreateTeam(ctx, "alice-id", "Alpha Team")
@@ -44,7 +45,7 @@ func TestCreateTeam_CreatorAutoAddedAsManager(t *testing.T) {
 }
 
 func TestAddMember_ManagerCanAdd(t *testing.T) {
-	svc, _ := newSvc()
+	svc, _ := newSvc(t)
 	ctx := context.Background()
 
 	result, _ := svc.CreateTeam(ctx, "alice-id", "Alpha Team")
@@ -56,7 +57,7 @@ func TestAddMember_ManagerCanAdd(t *testing.T) {
 }
 
 func TestAddMember_NonMemberForbidden(t *testing.T) {
-	svc, _ := newSvc()
+	svc, _ := newSvc(t)
 	ctx := context.Background()
 
 	result, _ := svc.CreateTeam(ctx, "alice-id", "Alpha Team")
@@ -68,7 +69,7 @@ func TestAddMember_NonMemberForbidden(t *testing.T) {
 }
 
 func TestAddMember_MemberForbidden(t *testing.T) {
-	svc, _ := newSvc()
+	svc, _ := newSvc(t)
 	ctx := context.Background()
 
 	result, _ := svc.CreateTeam(ctx, "alice-id", "Alpha Team")
@@ -81,7 +82,7 @@ func TestAddMember_MemberForbidden(t *testing.T) {
 }
 
 func TestRemoveMember_ManagerCanRemove(t *testing.T) {
-	svc, _ := newSvc()
+	svc, _ := newSvc(t)
 	ctx := context.Background()
 
 	result, _ := svc.CreateTeam(ctx, "alice-id", "Alpha Team")
@@ -94,7 +95,7 @@ func TestRemoveMember_ManagerCanRemove(t *testing.T) {
 }
 
 func TestRemoveMember_NonManagerForbidden(t *testing.T) {
-	svc, _ := newSvc()
+	svc, _ := newSvc(t)
 	ctx := context.Background()
 
 	result, _ := svc.CreateTeam(ctx, "alice-id", "Alpha Team")
@@ -107,7 +108,7 @@ func TestRemoveMember_NonManagerForbidden(t *testing.T) {
 }
 
 func TestPromoteToManager_CreatorCanPromote(t *testing.T) {
-	svc, repo := newSvc()
+	svc, repo := newSvc(t)
 	ctx := context.Background()
 
 	result, _ := svc.CreateTeam(ctx, "alice-id", "Alpha Team")
@@ -125,7 +126,7 @@ func TestPromoteToManager_CreatorCanPromote(t *testing.T) {
 }
 
 func TestPromoteToManager_NonCreatorForbidden(t *testing.T) {
-	svc, _ := newSvc()
+	svc, _ := newSvc(t)
 	ctx := context.Background()
 
 	result, _ := svc.CreateTeam(ctx, "alice-id", "Alpha Team")
@@ -139,7 +140,7 @@ func TestPromoteToManager_NonCreatorForbidden(t *testing.T) {
 }
 
 func TestDemoteFromManager_CreatorCanDemote(t *testing.T) {
-	svc, repo := newSvc()
+	svc, repo := newSvc(t)
 	ctx := context.Background()
 
 	result, _ := svc.CreateTeam(ctx, "alice-id", "Alpha Team")
@@ -158,7 +159,7 @@ func TestDemoteFromManager_CreatorCanDemote(t *testing.T) {
 }
 
 func TestDemoteFromManager_CannotDemoteCreator(t *testing.T) {
-	svc, _ := newSvc()
+	svc, _ := newSvc(t)
 	ctx := context.Background()
 
 	result, _ := svc.CreateTeam(ctx, "alice-id", "Alpha Team")
@@ -170,7 +171,7 @@ func TestDemoteFromManager_CannotDemoteCreator(t *testing.T) {
 }
 
 func TestRemoveMember_NonMemberReturnsError(t *testing.T) {
-	svc, _ := newSvc()
+	svc, _ := newSvc(t)
 	ctx := context.Background()
 
 	result, _ := svc.CreateTeam(ctx, "alice-id", "Alpha Team")
