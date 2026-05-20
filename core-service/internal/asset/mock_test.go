@@ -153,6 +153,20 @@ func (m *mockAssetRepo) List(_ context.Context, ownerID string, limit, offset in
 	return result[start:end], nil
 }
 
+func (m *mockAssetRepo) GetDepth(_ context.Context, assetID string) (int, error) {
+	depth := 0
+	current := assetID
+	for {
+		a, ok := m.assets[current]
+		if !ok || a.ParentID == nil {
+			break
+		}
+		depth++
+		current = *a.ParentID
+	}
+	return depth, nil
+}
+
 func (m *mockAssetRepo) CountByOwner(_ context.Context, ownerID string) (int64, error) {
 	var count int64
 	for _, a := range m.assets {

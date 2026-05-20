@@ -10,15 +10,16 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-func newSvc() (asset.Service, *mockAssetRepo) {
+func newSvc(t *testing.T) (asset.Service, *mockAssetRepo) {
+	t.Helper()
 	repo := newMockAssetRepo()
-	mr, _ := miniredis.Run()
+	mr := miniredis.RunT(t)
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	return asset.NewService(repo, rdb, &mockPublisher{}), repo
 }
 
 func TestShare_FolderCascadesToChildNotes(t *testing.T) {
-	svc, repo := newSvc()
+	svc, repo := newSvc(t)
 	ctx := context.Background()
 
 	repo.assets["folder-1"] = &asset.Asset{AssetID: "folder-1", OwnerID: "alice", Type: asset.AssetTypeFolder, Title: "My Folder"}
@@ -47,7 +48,7 @@ func TestShare_FolderCascadesToChildNotes(t *testing.T) {
 }
 
 func TestUpdate_FolderCannotSetContent(t *testing.T) {
-	svc, repo := newSvc()
+	svc, repo := newSvc(t)
 	ctx := context.Background()
 
 	repo.assets["folder-1"] = &asset.Asset{AssetID: "folder-1", OwnerID: "alice", Type: asset.AssetTypeFolder, Title: "My Folder"}
@@ -60,7 +61,7 @@ func TestUpdate_FolderCannotSetContent(t *testing.T) {
 }
 
 func TestGetByID_ManagerCanReadMemberAsset(t *testing.T) {
-	svc, repo := newSvc()
+	svc, repo := newSvc(t)
 	ctx := context.Background()
 
 	repo.assets["asset-1"] = &asset.Asset{AssetID: "asset-1", OwnerID: "bob", Type: asset.AssetTypeNote, Title: "Bob's note"}
@@ -76,7 +77,7 @@ func TestGetByID_ManagerCanReadMemberAsset(t *testing.T) {
 }
 
 func TestGetByID_NonManagerWithoutACLDenied(t *testing.T) {
-	svc, repo := newSvc()
+	svc, repo := newSvc(t)
 	ctx := context.Background()
 
 	repo.assets["asset-1"] = &asset.Asset{AssetID: "asset-1", OwnerID: "bob", Type: asset.AssetTypeNote, Title: "Bob's note"}
