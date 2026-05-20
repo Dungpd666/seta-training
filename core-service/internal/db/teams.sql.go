@@ -147,11 +147,13 @@ const isManagerOfMember = `-- name: IsManagerOfMember :one
 SELECT EXISTS (
     SELECT 1 FROM team_members tm_manager
     JOIN team_members tm_member ON tm_manager.team_id = tm_member.team_id
-    JOIN users_projection up ON tm_member.user_id = up.user_id
+    JOIN users_projection up_manager ON up_manager.user_id = tm_manager.user_id
+    JOIN users_projection up_member ON up_member.user_id = tm_member.user_id
     WHERE tm_manager.user_id = $1
     AND tm_manager.role = 'manager'
     AND tm_member.user_id = $2
-    AND up.deleted_at IS NULL
+    AND up_manager.deleted_at IS NULL
+    AND up_member.deleted_at IS NULL
 )
 `
 
@@ -178,5 +180,8 @@ type RemoveTeamMemberParams struct {
 
 func (q *Queries) RemoveTeamMember(ctx context.Context, arg RemoveTeamMemberParams) (int64, error) {
 	result, err := q.db.Exec(ctx, removeTeamMember, arg.TeamID, arg.UserID)
-	return result.RowsAffected(), err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

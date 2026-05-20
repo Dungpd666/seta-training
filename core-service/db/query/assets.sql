@@ -26,3 +26,13 @@ OFFSET $3;
 -- name: CountAssetsByOwner :one 
 SELECT COUNT(*) FROM assets WHERE owner_id = $1;
 
+-- name: GetAssetDepth :one
+WITH RECURSIVE ancestors AS (
+    SELECT parent_id, 0 AS depth FROM assets WHERE assets.asset_id = $1
+    UNION ALL
+    SELECT a.parent_id, anc.depth + 1
+    FROM assets a
+    JOIN ancestors anc ON a.asset_id = anc.parent_id
+    WHERE anc.parent_id IS NOT NULL
+)
+SELECT COALESCE(MAX(depth), 0)::int AS depth FROM ancestors;

@@ -28,11 +28,13 @@ AND deleted_at IS NULL;
 SELECT EXISTS (
     SELECT 1 FROM team_members tm_manager
     JOIN team_members tm_member ON tm_manager.team_id = tm_member.team_id
-    JOIN users_projection up ON tm_member.user_id = up.user_id
+    JOIN users_projection up_manager ON up_manager.user_id = tm_manager.user_id
+    JOIN users_projection up_member ON up_member.user_id = tm_member.user_id
     WHERE tm_manager.user_id = sqlc.arg(manager_id)
     AND tm_manager.role = 'manager'
     AND tm_member.user_id = sqlc.arg(member_id)
-    AND up.deleted_at IS NULL
+    AND up_manager.deleted_at IS NULL
+    AND up_member.deleted_at IS NULL
 );
 
 -- name: GetTeamMembers :many

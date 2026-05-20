@@ -85,6 +85,25 @@ func (q *Queries) GetAssetByID(ctx context.Context, assetID string) (Asset, erro
 	return i, err
 }
 
+const getAssetDepth = `-- name: GetAssetDepth :one
+WITH RECURSIVE ancestors AS (
+    SELECT parent_id, 0 AS depth FROM assets WHERE assets.asset_id = $1
+    UNION ALL
+    SELECT a.parent_id, anc.depth + 1
+    FROM assets a
+    JOIN ancestors anc ON a.asset_id = anc.parent_id
+    WHERE anc.parent_id IS NOT NULL
+)
+SELECT COALESCE(MAX(depth), 0)::int AS depth FROM ancestors
+`
+
+func (q *Queries) GetAssetDepth(ctx context.Context, assetID string) (int32, error) {
+	row := q.db.QueryRow(ctx, getAssetDepth, assetID)
+	var depth int32
+	err := row.Scan(&depth)
+	return depth, err
+}
+
 const listAssets = `-- name: ListAssets :many
 SELECT asset_id, owner_id, parent_id, type, title, content, created_at
 FROM assets 
