@@ -22,6 +22,7 @@ var (
 	ErrParentNotFolder         = errors.New("parent asset is not a folder")
 	ErrNoteRequiresParent      = errors.New("note asset requires a parent folder")
 	ErrFolderContentNotAllowed = errors.New("folder asset cannot have content")
+	ErrMaxDepthExceeded        = errors.New("maximum folder depth exceeded")
 )
 
 const TopicAssetChanges = "asset.changes"

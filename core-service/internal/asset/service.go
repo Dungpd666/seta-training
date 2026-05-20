@@ -27,6 +27,8 @@ type service struct {
 	rdb       *redis.Client
 }
 
+const maxFolderDepth = 20
+
 func NewService(repo Repository, rdb *redis.Client, publisher Publisher) Service {
 	return &service{repo: repo, publisher: publisher, rdb: rdb}
 }
@@ -54,6 +56,13 @@ func (s *service) Create(ctx context.Context, callerID string, parentID *string,
 		}
 		if err := s.requireWriteAccess(ctx, parent, callerID); err != nil {
 			return nil, err
+		}
+		depth, err := s.repo.GetDepth(ctx, *parentID)
+		if err != nil {
+			return nil, err
+		}
+		if depth >= maxFolderDepth {
+			return nil, ErrMaxDepthExceeded
 		}
 	}
 	created, err := s.repo.Create(ctx, callerID, parentID, assetType, title, content)
@@ -153,7 +162,9 @@ func (s *service) Update(ctx context.Context, callerID, assetID, title string, c
 	if existing.Type == AssetTypeNote {
 		s.publishEvent(ctx, EventNoteUpdated, assetID, existing.OwnerID)
 	}
-	s.rdb.Del(ctx, cache.AssetKey(assetID))
+	if err := s.rdb.Del(ctx, cache.AssetKey(assetID)).Err(); err != nil {
+		log.Warn().Err(err).Str("asset_id", assetID).Str("op", "update").Msg("cache invalidation failed")
+	}
 	return updated, nil
 }
 
@@ -190,11 +201,13 @@ func (s *service) Delete(ctx context.Context, callerID, assetID string) error {
 	if err := s.repo.Delete(ctx, assetID); err != nil {
 		return err
 	}
-	s.rdb.Del(ctx, cache.AssetKey(assetID))
-	s.rdb.Del(ctx, cache.AssetACLKey(assetID))
+	delKeys := make([]string, 0, 2+2*len(descendants))
+	delKeys = append(delKeys, cache.AssetKey(assetID), cache.AssetACLKey(assetID))
 	for _, id := range descendants {
-		s.rdb.Del(ctx, cache.AssetKey(id))
-		s.rdb.Del(ctx, cache.AssetACLKey(id))
+		delKeys = append(delKeys, cache.AssetKey(id), cache.AssetACLKey(id))
+	}
+	if err := s.rdb.Del(ctx, delKeys...).Err(); err != nil {
+		log.Warn().Err(err).Str("asset_id", assetID).Str("op", "delete").Msg("cache invalidation failed")
 	}
 	if existing.Type == AssetTypeFolder {
 		s.publishEvent(ctx, EventFolderDeleted, assetID, existing.OwnerID)
@@ -223,11 +236,8 @@ func (s *service) Share(ctx context.Context, callerID, assetID, targetUserID, ac
 	}
 	if asset.Type == AssetTypeFolder {
 		s.publishEvent(ctx, EventFolderShared, assetID, asset.OwnerID)
-		for _, id := range descendants {
-			s.rdb.Del(ctx, cache.AssetACLKey(id))
-		}
 	}
-	s.rdb.Del(ctx, cache.AssetACLKey(assetID))
+	s.invalidateACLCache(ctx, assetID, descendants, "share")
 	return nil
 }
 
@@ -243,11 +253,19 @@ func (s *service) RevokeShare(ctx context.Context, callerID, assetID, targetUser
 	if err != nil {
 		return err
 	}
-	for _, id := range descendants {
-		s.rdb.Del(ctx, cache.AssetACLKey(id))
-	}
-	s.rdb.Del(ctx, cache.AssetACLKey(assetID))
+	s.invalidateACLCache(ctx, assetID, descendants, "revoke")
 	return nil
+}
+
+func (s *service) invalidateACLCache(ctx context.Context, assetID string, descendants []string, op string) {
+	keys := make([]string, 0, 1+len(descendants))
+	keys = append(keys, cache.AssetACLKey(assetID))
+	for _, id := range descendants {
+		keys = append(keys, cache.AssetACLKey(id))
+	}
+	if err := s.rdb.Del(ctx, keys...).Err(); err != nil {
+		log.Warn().Err(err).Str("asset_id", assetID).Str("op", op).Msg("cache invalidation failed")
+	}
 }
 
 func (s *service) List(ctx context.Context, callerID string, page, limit int) ([]*Asset, int64, error) {

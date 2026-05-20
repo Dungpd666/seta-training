@@ -26,6 +26,7 @@ type Repository interface {
 	UserExists(ctx context.Context, userID string) (bool, error)
 	List(ctx context.Context, ownerID string, limit, offset int32) ([]*Asset, error)
 	CountByOwner(ctx context.Context, ownerID string) (int64, error)
+	GetDepth(ctx context.Context, assetID string) (int, error)
 }
 
 type repo struct {
@@ -266,4 +267,12 @@ func rowToAsset(row db.Asset) *Asset {
 		a.Content = &row.Content.String
 	}
 	return a
+}
+
+func (r *repo) GetDepth(ctx context.Context, assetID string) (int, error) {
+	depth, err := r.q.GetAssetDepth(ctx, assetID)
+	if err != nil {
+		return 0, err
+	}
+	return int(depth), nil
 }

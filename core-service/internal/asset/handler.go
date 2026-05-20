@@ -25,6 +25,8 @@ func writeAssetErr(c *gin.Context, err error) bool {
 		response.Error(c, http.StatusNotFound, response.ErrNotFound, err.Error())
 	case errors.Is(err, ErrForbidden):
 		response.Error(c, http.StatusForbidden, response.ErrForbidden, err.Error())
+	case errors.Is(err, ErrMaxDepthExceeded):
+		response.Error(c, http.StatusUnprocessableEntity, response.ErrUnprocessable, err.Error())
 	case errors.Is(err, ErrInvalidType) || errors.Is(err, ErrNoteRequiresParent) ||
 		errors.Is(err, ErrParentNotFolder) || errors.Is(err, ErrFolderContentNotAllowed) ||
 		errors.Is(err, ErrTargetUserNotFound):
