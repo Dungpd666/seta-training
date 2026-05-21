@@ -138,3 +138,38 @@ a,a@x.com,p,member`
 		t.Errorf("succeeded = %d, want 1 (default kept)", result.Succeeded)
 	}
 }
+
+func TestImportFromCSV_MalformedRow(t *testing.T) {
+	repo := &mockRepo{}
+	svc := user.NewService(repo)
+	csv := `username,email,password,role
+alice,alice@x.com,pass1,manager
+badrow,missing-columns
+charlie,charlie@x.com,pass3,member`
+
+	result, err := svc.ImportFromCSV(context.Background(), strings.NewReader(csv), 2)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Succeeded != 2 {
+		t.Errorf("succeeded = %d, want 2", result.Succeeded)
+	}
+	if result.Failed != 1 {
+		t.Errorf("failed = %d, want 1", result.Failed)
+	}
+}
+
+func TestImportFromCSV_TrimWhitespace(t *testing.T) {
+	repo := &mockRepo{}
+	svc := user.NewService(repo)
+	csv := `username,email,password,role
+  alice  ,  alice@x.com  ,  pass1  ,  manager  `
+
+	result, err := svc.ImportFromCSV(context.Background(), strings.NewReader(csv), 1)
+	if err != nil {
+		t.Fatalf("unexpected: %v", err)
+	}
+	if result.Succeeded != 1 {
+		t.Errorf("succeeded = %d, want 1", result.Succeeded)
+	}
+}

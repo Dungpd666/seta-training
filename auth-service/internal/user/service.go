@@ -140,20 +140,17 @@ func (s *service) ListPage(ctx context.Context, cursor string, limit int32) ([]U
 }
 
 func (s *service) ImportFromCSV(ctx context.Context, r io.Reader, workers int) (*ImportResult, error) {
-	rows, err := parseCSV(r)
+	if workers <= 0 {
+		workers = s.defaultWorkers
+	}
+
+	reader, err := newCSVReader(r)
 	if err != nil {
 		return nil, err
 	}
 
-	if workers <= 0 {
-		workers = s.defaultWorkers
-	}
-	if workers > len(rows) && len(rows) > 0 {
-		workers = len(rows)
-	}
-
-	jobs := make(chan CSVRow, len(rows))
-	results := make(chan rowResult, len(rows))
+	jobs := make(chan CSVRow, workers*2)
+	results := make(chan rowResult, workers*4)
 
 	var wg sync.WaitGroup
 	for i := 0; i < workers; i++ {
@@ -161,16 +158,46 @@ func (s *service) ImportFromCSV(ctx context.Context, r io.Reader, workers int) (
 		go s.importWorker(ctx, &wg, jobs, results)
 	}
 
-	for _, row := range rows {
-		jobs <- row
-	}
-	close(jobs)
+	go func() {
+		defer close(jobs)
+		lineNo := 1
+		for {
+			lineNo++
+			record, err := reader.Read()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				select {
+				case <-ctx.Done():
+					return
+				case results <- rowResult{lineNo: lineNo, err: err}:
+				}
+				continue
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case jobs <- CSVRow{
+				LineNo:   lineNo,
+				Username: strings.TrimSpace(record[0]),
+				Email:    strings.TrimSpace(record[1]),
+				Password: record[2],
+				Role:     strings.TrimSpace(record[3]),
+			}:
+			}
+		}
+	}()
 
 	go func() {
 		wg.Wait()
 		close(results)
 	}()
 
+	return s.collectAndPublish(ctx, results), nil
+}
+
+func (s *service) collectAndPublish(ctx context.Context, results <-chan rowResult) *ImportResult {
 	result := &ImportResult{Errors: []ImportError{}}
 	for r := range results {
 		if r.err != nil {
@@ -183,21 +210,20 @@ func (s *service) ImportFromCSV(ctx context.Context, r io.Reader, workers int) (
 			result.Succeeded++
 		}
 	}
-
-	sort.Slice(result.Errors, func(i, j int) bool {
-		return result.Errors[i].Row < result.Errors[j].Row
-	})
-
+	if len(result.Errors) > 1 {
+		sort.Slice(result.Errors, func(i, j int) bool {
+			return result.Errors[i].Row < result.Errors[j].Row
+		})
+	}
 	s.publish(ctx, TopicUserEvents, UsersImportedEvent{
 		Type:      EventUsersImported,
 		Succeeded: result.Succeeded,
 		Failed:    result.Failed,
 	})
-
-	return result, nil
+	return result
 }
 
-func parseCSV(r io.Reader) ([]CSVRow, error) {
+func newCSVReader(r io.Reader) (*csv.Reader, error) {
 	reader := csv.NewReader(r)
 	reader.TrimLeadingSpace = true
 	reader.FieldsPerRecord = len(expectedHeader)
@@ -209,28 +235,9 @@ func parseCSV(r io.Reader) ([]CSVRow, error) {
 	if err := validateHeader(header); err != nil {
 		return nil, err
 	}
-
-	var rows []CSVRow
-	lineNo := 1
-	for {
-		lineNo++
-		record, err := reader.Read()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, fmt.Errorf("line %d: %w", lineNo, err)
-		}
-		rows = append(rows, CSVRow{
-			LineNo:   lineNo,
-			Username: strings.TrimSpace(record[0]),
-			Email:    strings.TrimSpace(record[1]),
-			Password: record[2],
-			Role:     strings.TrimSpace(record[3]),
-		})
-	}
-	return rows, nil
+	return reader, nil
 }
+
 
 func validateHeader(header []string) error {
 	if len(header) != len(expectedHeader) {
